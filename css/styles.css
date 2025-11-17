@@ -320,13 +320,378 @@
     @apply bg-blue-50;
 }
 
+/* Calendar view controls */
+.view-btn {
+    @apply px-3 py-1 rounded-md text-sm font-medium transition hover:bg-gray-200;
+}
+
+.view-btn.active {
+    @apply bg-indigo-600 text-white;
+}
+
+/* Calendar event items */
+.event-item {
+    @apply p-2 rounded cursor-pointer transition-all duration-200 hover:shadow-md;
+}
+
+.event-item.dragging {
+    @apply opacity-50 transform rotate-2;
+}
+
+/* Calendar search and filter styles */
+#calendar-search {
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+}
+
+#calendar-category-filter {
+    @apply px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+}
+
+/* Calendar statistics cards */
+.calendar-stat-card {
+    @apply bg-gradient-to-br rounded-lg p-4 text-white shadow-lg;
+}
+
+/* Calendar week view */
+.calendar-week-day {
+    @apply border rounded-lg p-4 transition-all duration-200 hover:shadow-md;
+}
+
+/* Calendar day view */
+.calendar-day-detail {
+    @apply bg-white rounded-lg shadow-lg p-6 transition-all duration-200;
+}
+
+/* Calendar event modal */
+#event-modal {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-backdrop;
+    backdrop-filter: blur(4px);
+}
+
+#event-modal .modal-content {
+    @apply bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto;
+}
+
+/* Enhanced modal animation */
+#event-modal:not(.hidden) {
+    @apply flex items-center justify-center;
+}
+
+#event-modal-content {
+    @apply transform transition-all duration-300 ease-out;
+}
+
+/* Color picker styles for event modal */
+.event-color-option {
+    @apply w-6 h-6 rounded-full cursor-pointer transition-transform duration-200 hover:scale-110;
+}
+
+.event-color-option.ring-indigo-500 {
+    @apply ring-2 ring-offset-2 ring-indigo-500;
+}
+
+/* Calendar sharing modal */
+#calendar-sharing-modal {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-backdrop;
+}
+
+#calendar-sharing-modal .modal-content {
+    @apply bg-white rounded-xl p-6 w-full max-w-md;
+}
+
+/* Calendar drag and drop styles */
+.calendar-day.drag-over {
+    @apply bg-blue-100 border-dashed border-2 border-blue-500;
+}
+
+/* Calendar event category badges */
+.event-category-badge {
+    @apply px-2 py-1 rounded-full text-xs font-semibold;
+}
+
+.event-category-todo {
+    @apply event-category-badge bg-blue-100 text-blue-800;
+}
+
+.event-category-habit {
+    @apply event-category-badge bg-green-100 text-green-800;
+}
+
+.event-category-goal {
+    @apply event-category-badge bg-purple-100 text-purple-800;
+}
+
+.event-category-journal {
+    @apply event-category-badge bg-yellow-100 text-yellow-800;
+}
+
+.event-category-custom {
+    @apply event-category-badge bg-indigo-100 text-indigo-800;
+}
+
+.event-category-meeting {
+    @apply event-category-badge bg-red-100 text-red-800;
+}
+
+.event-category-personal {
+    @apply event-category-badge bg-pink-100 text-pink-800;
+}
+
+.event-category-work {
+    @apply event-category-badge bg-gray-100 text-gray-800;
+}
+
+/* Calendar event indicators */
+.event-reminder-indicator {
+    @apply inline-block w-2 h-2 rounded-full bg-yellow-500 ml-1;
+}
+
+.event-recurring-indicator {
+    @apply inline-block w-2 h-2 rounded-full bg-green-500 ml-1;
+}
+
+/* Calendar print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    .calendar-day {
+        page-break-inside: avoid;
+        min-height: 120px;
+    }
+}
+
+/* Calendar responsive styles */
+@media (max-width: 768px) {
+    .calendar-day {
+        @apply h-16 p-1;
+        font-size: 0.75rem;
+    }
+
+    .event-item {
+        @apply text-xs p-1;
+    }
+
+    .calendar-week-day {
+        @apply p-2;
+    }
+}
+
+/* Calendar animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.calendar-day {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Calendar focus states */
+.calendar-day:focus {
+    @apply outline-none ring-2 ring-indigo-500 ring-offset-2;
+}
+
+.event-item:focus {
+    @apply outline-none ring-2 ring-indigo-500 ring-offset-2;
+}
+
 /* Enhanced journal styles */
 .journal-entry {
-    @apply bg-white rounded-lg shadow-md p-6 transition-all duration-300 hover:shadow-lg;
+    @apply bg-white rounded-xl shadow-md p-5 mb-4 transition-all duration-300 hover:shadow-lg border-l-4;
 }
 
 .journal-mood {
     @apply text-3xl mb-2;
+}
+
+/* Enhanced mood color classes */
+.mood-very-happy {
+    @apply border-green-500 bg-green-50;
+}
+
+.mood-happy {
+    @apply border-blue-500 bg-blue-50;
+}
+
+.mood-neutral {
+    @apply border-gray-500 bg-gray-50;
+}
+
+.mood-sad {
+    @apply border-purple-500 bg-purple-50;
+}
+
+.mood-angry {
+    @apply border-red-500 bg-red-50;
+}
+
+/* Journal editor styles */
+#journal-content-editor {
+    @apply w-full min-h-64 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}
+
+/* Journal tag styles */
+.journal-tag {
+    @apply px-3 py-1 bg-indigo-100 text-indigo-800 text-sm rounded-full cursor-pointer hover:bg-indigo-200 transition-colors flex items-center;
+}
+
+/* Journal mood button styles */
+.mood-btn {
+    @apply px-4 py-2 rounded-lg border-2 border-gray-300 hover:border-indigo-500 transition flex items-center;
+}
+
+.mood-btn.active {
+    @apply border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500;
+}
+
+/* Calendar view styles */
+.calendar-day.has-entry {
+    @apply bg-indigo-100 border-indigo-300;
+}
+
+.calendar-day.today {
+    @apply bg-blue-500 text-white;
+}
+
+/* Journal statistics card styles */
+.journal-stat-card {
+    @apply bg-gradient-to-br rounded-lg p-6 text-white shadow-lg;
+}
+
+/* Journal template card styles */
+.template-card {
+    @apply border rounded-xl p-4 cursor-pointer hover:bg-gray-50 transition-all duration-200 hover:shadow-md;
+}
+
+/* Journal mood tracker modal styles */
+.mood-tracker-modal {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.mood-tracker-content {
+    @apply bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden;
+}
+
+/* Auto-save indicator styles */
+#auto-save-indicator {
+    @apply text-gray-500 text-sm italic;
+}
+
+#auto-save-indicator.saving {
+    @apply text-green-600;
+}
+
+/* Journal filter toggle styles */
+.filter-toggle {
+    @apply px-3 py-2 rounded-lg hover:bg-gray-100 transition flex items-center;
+}
+
+/* Journal attachment button styles */
+.attachment-btn {
+    @apply px-3 py-2 rounded-lg hover:bg-gray-100 transition text-sm flex items-center;
+}
+
+/* Journal export button styles */
+.export-btn {
+    @apply px-6 py-2 rounded-lg hover:bg-gray-100 transition flex items-center;
+}
+
+/* Journal search input styles */
+#journal-search {
+    @apply px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}
+
+/* Journal mood filter styles */
+#mood-filter, #date-range-filter {
+    @apply px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}
+
+/* Journal stats display styles */
+#journal-stats {
+    @apply text-sm text-gray-500;
+}
+
+/* Journal list container styles */
+#journal-list {
+    @apply space-y-4;
+}
+
+/* Journal entry animation */
+.journal-entry {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Journal content editor toolbar styles */
+.journal-editor-toolbar {
+    @apply flex flex-wrap items-center gap-2 mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200;
+}
+
+/* Journal editor button styles */
+.format-btn {
+    @apply p-2 text-sm bg-white rounded hover:bg-gray-100 border border-gray-300 transition-colors;
+}
+
+/* Journal more options menu styles */
+.more-options-menu {
+    @apply hidden absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg z-10 py-2 border border-gray-200;
+}
+
+/* Journal entry header styles */
+.journal-entry-header {
+    @apply flex justify-between items-start mb-3;
+}
+
+/* Journal entry content styles */
+.journal-entry-content {
+    @apply mb-4 p-4 bg-gray-50 rounded-lg prose max-w-none;
+}
+
+/* Journal entry footer styles */
+.journal-entry-footer {
+    @apply flex justify-between items-center text-sm text-gray-500 border-t border-gray-100 pt-3;
+}
+
+/* Journal gratitude section styles */
+.journal-gratitude {
+    @apply mb-4 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-100;
+}
+
+/* Journal goals section styles */
+.journal-goals {
+    @apply mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100;
+}
+
+/* Journal reflection section styles */
+.journal-reflection {
+    @apply mb-4 p-4 bg-gradient-to-r from-purple-50 to-violet-50 rounded-lg border border-purple-100;
+}
+
+/* Journal activities section styles */
+.journal-activities {
+    @apply mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100;
+}
+
+/* Journal mood display styles */
+.journal-mood-display {
+    @apply flex items-center bg-gray-100 rounded-full px-3 py-1;
+}
+
+/* Journal metadata display styles */
+.journal-metadata {
+    @apply flex items-center flex-wrap gap-2 mt-2;
 }
 
 /* Enhanced goal styles */
@@ -685,11 +1050,11 @@ body.dark-theme .todo-item {
 
 /* Enhanced habit styles */
 .habit-card {
-    @apply bg-white rounded-lg shadow-md p-4 transition-all duration-300;
+    @apply bg-white rounded-xl shadow-lg p-5 transition-all duration-300 hover:shadow-xl border border-gray-100;
 }
 
 .habit-card:hover {
-    @apply shadow-lg transform -translate-y-1;
+    @apply shadow-xl transform -translate-y-1;
 }
 
 .habit-streak {
@@ -716,6 +1081,72 @@ body.dark-theme .todo-item {
 /* Enhanced note styles */
 .note-card {
     @apply bg-white rounded-lg shadow-md p-4 transition-all duration-300 cursor-pointer;
+}
+
+/* Habit calendar visualization */
+.habit-calendar-day {
+    @apply w-6 h-6 rounded-sm cursor-pointer hover:scale-110 transition-transform;
+}
+
+.habit-calendar-day.today {
+    @apply border-2 border-blue-500;
+}
+
+/* Habit history modal */
+#habit-history-modal, #habit-calendar-modal {
+    @apply flex items-center justify-center;
+}
+
+.habit-history-grid {
+    @apply grid grid-cols-7 gap-1;
+}
+
+/* Responsive grid for habit cards */
+.habits-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+
+/* Enhanced progress bars */
+.progress-bar {
+    @apply w-full bg-gray-200 rounded-full h-2.5;
+}
+
+.progress-bar-fill {
+    @apply h-2.5 rounded-full transition-all duration-500 ease-out;
+}
+
+/* Habit streak visualization */
+.streak-meter {
+    @apply w-full bg-gray-200 rounded-full h-2.5;
+}
+
+.streak-meter-fill {
+    @apply h-2.5 rounded-full transition-all duration-500 ease-out;
+}
+
+/* Animated habit cards */
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Habit category badges */
+.habit-category-badge {
+    @apply px-2 py-1 rounded-full text-xs font-medium;
+}
+
+/* Habit difficulty indicators */
+.habit-difficulty-easy { @apply text-green-600; }
+.habit-difficulty-medium { @apply text-yellow-600; }
+.habit-difficulty-hard { @apply text-red-600; }
+
+/* Habit frequency labels */
+.habit-frequency-label {
+    @apply text-xs text-gray-500;
 }
 
 .note-card:hover {

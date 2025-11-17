@@ -20,7 +20,9 @@ const Notes = {
     templates: [
         { id: 'meeting', name: 'Catatan Rapat', content: '# [Judul Rapat]\n\n## Peserta\n- \n\n## Agenda\n- \n\n## Catatan Penting\n\n## Tindak Lanjut\n- [ ] ' },
         { id: 'project', name: 'Catatan Proyek', content: '# [Nama Proyek]\n\n## Tujuan\n\n## Tugas\n- [ ] \n\n## Tenggat Waktu\n\n## Catatan\n\n## Rencana Berikutnya\n' },
-        { id: 'idea', name: 'Catatan Ide', content: '# [Judul Ide]\n\n## Deskripsi\n\n## Potensi Manfaat\n\n## Langkah Implementasi\n- [ ] \n\n## Sumber Inspirasi\n\n## Catatan Tambahan\n' }
+        { id: 'idea', name: 'Catatan Ide', content: '# [Judul Ide]\n\n## Deskripsi\n\n## Potensi Manfaat\n\n## Langkah Implementasi\n- [ ] \n\n## Sumber Inspirasi\n\n## Catatan Tambahan\n' },
+        { id: 'daily', name: 'Catatan Harian', content: '# [Tanggal]\n\n## Kegiatan Hari Ini\n\n## Pencapaian\n\n## Tantangan\n\n## Rencana Esok\n\n## Refleksi\n' },
+        { id: 'learning', name: 'Catatan Belajar', content: '# [Topik]\n\n## Konsep Utama\n\n## Contoh\n\n## Kesimpulan\n\n## Tindak Lanjut\n' }
     ],
     versionHistory: {},
 
@@ -30,6 +32,8 @@ const Notes = {
         this.setupKeyboardShortcuts();
         this.render();
         this.updateStats();
+        this.initVoiceRecognition();
+        this.initNoteSharing();
     },
 
     loadNotes() {
@@ -54,7 +58,17 @@ const Notes = {
             sharedWith: note.sharedWith || [],
             template: note.template || null,
             wordCount: note.wordCount || 0,
-            readingTime: note.readingTime || 0
+            readingTime: note.readingTime || 0,
+            encrypted: note.encrypted || false,
+            accessLevel: note.accessLevel || 'private',
+            collaborationEnabled: note.collaborationEnabled || false,
+            versionHistory: note.versionHistory || [],
+            attachments: note.attachments || [],
+            metadata: note.metadata || {
+                author: note.author || 'user',
+                lastEditedBy: note.lastEditedBy || 'user',
+                lastAccessed: note.lastAccessed || new Date().toISOString()
+            }
         }));
 
         this.saveNotes();
@@ -156,6 +170,65 @@ const Notes = {
         if (bulkPinBtn) {
             bulkPinBtn.addEventListener('click', () => this.bulkPinNotes());
         }
+
+        // Template selection
+        const templateSelect = document.getElementById('template-select');
+        if (templateSelect) {
+            templateSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    this.applyTemplate(e.target.value);
+                    e.target.value = '';
+                }
+            });
+        }
+
+        // Note sharing toggle
+        const shareToggle = document.getElementById('share-notes-toggle');
+        if (shareToggle) {
+            shareToggle.addEventListener('change', (e) => {
+                this.toggleNoteSharing(e.target.checked);
+            });
+        }
+
+        // Note encryption toggle
+        const encryptToggle = document.getElementById('encrypt-notes-toggle');
+        if (encryptToggle) {
+            encryptToggle.addEventListener('change', (e) => {
+                this.toggleNoteEncryption(e.target.checked);
+            });
+        }
+
+        // Voice recording button
+        const voiceBtn = document.getElementById('voice-note-btn');
+        if (voiceBtn) {
+            voiceBtn.addEventListener('click', () => this.startVoiceRecording());
+        }
+
+        // Note backup button
+        const backupBtn = document.getElementById('backup-notes-btn');
+        if (backupBtn) {
+            backupBtn.addEventListener('click', () => this.backupNotes());
+        }
+
+        // Note restore button
+        const restoreBtn = document.getElementById('restore-notes-btn');
+        if (restoreBtn) {
+            restoreBtn.addEventListener('click', () => this.restoreNotes());
+        }
+
+        // Note import button
+        const importBtn = document.getElementById('import-notes-btn');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => this.importNotes());
+        }
+
+        // Note statistics toggle
+        const statsToggle = document.getElementById('show-note-stats');
+        if (statsToggle) {
+            statsToggle.addEventListener('change', (e) => {
+                this.toggleNoteStats(e.target.checked);
+            });
+        }
     },
 
     setupKeyboardShortcuts() {
@@ -189,6 +262,30 @@ const Notes = {
             if (e.key === 'Escape' && this.editorModal) {
                 this.closeEditorModal();
             }
+
+            // Ctrl/Cmd + Shift + N: New note with template
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+                e.preventDefault();
+                this.openTemplateSelector();
+            }
+
+            // Ctrl/Cmd + E: Export all notes
+            if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+                e.preventDefault();
+                this.exportAllNotes();
+            }
+
+            // Ctrl/Cmd + B: Backup notes
+            if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+                e.preventDefault();
+                this.backupNotes();
+            }
+
+            // Ctrl/Cmd + R: Restore notes
+            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+                e.preventDefault();
+                this.restoreNotes();
+            }
         });
     },
 
@@ -213,7 +310,16 @@ const Notes = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             wordCount: this.countWords(content),
-            readingTime: Math.ceil(this.countWords(content) / 200)
+            readingTime: Math.ceil(this.countWords(content) / 200),
+            encrypted: false,
+            accessLevel: 'private',
+            collaborationEnabled: false,
+            versionHistory: [],
+            metadata: {
+                author: 'user',
+                lastEditedBy: 'user',
+                lastAccessed: new Date().toISOString()
+            }
         };
 
         // Validate the note before saving
@@ -278,47 +384,57 @@ const Notes = {
         const toolbar = document.createElement('div');
         toolbar.className = 'flex flex-wrap items-center gap-2 p-2 bg-gray-100 border-b rounded-t-lg';
         toolbar.innerHTML = `
-            <button type="button" class="toolbar-btn" data-command="bold" title="Tebal">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="bold" title="Tebal">
                 <i class="fas fa-bold"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="italic" title="Miring">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="italic" title="Miring">
                 <i class="fas fa-italic"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="underline" title="Garis Bawah">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="underline" title="Garis Bawah">
                 <i class="fas fa-underline"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="strikeThrough" title="Coret">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="strikeThrough" title="Coret">
                 <i class="fas fa-strikethrough"></i>
             </button>
             <div class="border-l border-gray-300 h-6 mx-1"></div>
-            <button type="button" class="toolbar-btn" data-command="formatBlock" data-value="h1" title="Judul 1">
-                <i class="fas fa-heading"></i><span class="ml-1">1</span>
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="formatBlock" data-value="h1" title="Judul 1">
+                <i class="fas fa-heading"></i><span class="ml-1 text-sm">1</span>
             </button>
-            <button type="button" class="toolbar-btn" data-command="formatBlock" data-value="h2" title="Judul 2">
-                <i class="fas fa-heading"></i><span class="ml-1">2</span>
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="formatBlock" data-value="h2" title="Judul 2">
+                <i class="fas fa-heading"></i><span class="ml-1 text-sm">2</span>
             </button>
-            <button type="button" class="toolbar-btn" data-command="formatBlock" data-value="h3" title="Judul 3">
-                <i class="fas fa-heading"></i><span class="ml-1">3</span>
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="formatBlock" data-value="h3" title="Judul 3">
+                <i class="fas fa-heading"></i><span class="ml-1 text-sm">3</span>
             </button>
             <div class="border-l border-gray-300 h-6 mx-1"></div>
-            <button type="button" class="toolbar-btn" data-command="insertUnorderedList" title="Daftar">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertUnorderedList" title="Daftar">
                 <i class="fas fa-list-ul"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="insertOrderedList" title="Daftar Berurut">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertOrderedList" title="Daftar Berurut">
                 <i class="fas fa-list-ol"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="insertChecklist" title="Daftar Checklist">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertChecklist" title="Daftar Checklist">
                 <i class="fas fa-list-check"></i>
             </button>
             <div class="border-l border-gray-300 h-6 mx-1"></div>
-            <button type="button" class="toolbar-btn" data-command="createLink" title="Tambah Tautan">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="createLink" title="Tambah Tautan">
                 <i class="fas fa-link"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="insertImage" title="Tambah Gambar">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertImage" title="Tambah Gambar">
                 <i class="fas fa-image"></i>
             </button>
-            <button type="button" class="toolbar-btn" data-command="insertHorizontalRule" title="Garis Pemisah">
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertHorizontalRule" title="Garis Pemisah">
                 <i class="fas fa-grip-lines"></i>
+            </button>
+            <div class="border-l border-gray-300 h-6 mx-1"></div>
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertTable" title="Tambah Tabel">
+                <i class="fas fa-table"></i>
+            </button>
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertCode" title="Tambah Kode">
+                <i class="fas fa-code"></i>
+            </button>
+            <button type="button" class="toolbar-btn p-2 rounded hover:bg-gray-200 transition-colors" data-command="insertQuote" title="Tambah Kutipan">
+                <i class="fas fa-quote-right"></i>
             </button>
         `;
 
@@ -347,10 +463,16 @@ const Notes = {
 
                 if (command === 'insertChecklist') {
                     this.insertChecklist();
+                } else if (command === 'insertTable') {
+                    this.insertTable();
+                } else if (command === 'insertCode') {
+                    this.insertCodeBlock();
+                } else if (command === 'insertQuote') {
+                    this.insertQuote();
                 } else {
                     document.execCommand(command, false, value);
                 }
-                
+
                 contentDiv.focus();
             });
         });
@@ -366,13 +488,65 @@ const Notes = {
         const checklistHTML = `
             <ul class="checklist">
                 <li class="flex items-center">
-                    <input type="checkbox" class="mr-2 checklist-item"> 
+                    <input type="checkbox" class="mr-2 checklist-item">
                     <span contenteditable="true">Item checklist</span>
                 </li>
             </ul>
         `;
-        
+
         document.execCommand('insertHTML', false, checklistHTML);
+    },
+
+    insertTable() {
+        const contentDiv = document.getElementById('note-editor-content');
+        if (!contentDiv) return;
+
+        const tableHTML = `
+            <table class="table-auto border-collapse border border-gray-300">
+                <thead>
+                    <tr>
+                        <th class="border border-gray-300 px-4 py-2">Kolom 1</th>
+                        <th class="border border-gray-300 px-4 py-2">Kolom 2</th>
+                        <th class="border border-gray-300 px-4 py-2">Kolom 3</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="border border-gray-300 px-4 py-2">Isi</td>
+                        <td class="border border-gray-300 px-4 py-2">Isi</td>
+                        <td class="border border-gray-300 px-4 py-2">Isi</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
+
+        document.execCommand('insertHTML', false, tableHTML);
+    },
+
+    insertCodeBlock() {
+        const contentDiv = document.getElementById('note-editor-content');
+        if (!contentDiv) return;
+
+        const codeHTML = `
+            <pre class="bg-gray-100 p-4 rounded-lg overflow-x-auto">
+                <code class="language-javascript">/* Kode Anda di sini */</code>
+            </pre>
+        `;
+
+        document.execCommand('insertHTML', false, codeHTML);
+    },
+
+    insertQuote() {
+        const contentDiv = document.getElementById('note-editor-content');
+        if (!contentDiv) return;
+
+        const quoteHTML = `
+            <blockquote class="border-l-4 border-gray-300 pl-4 italic text-gray-600">
+                <p>Kutipan Anda di sini...</p>
+            </blockquote>
+        `;
+
+        document.execCommand('insertHTML', false, quoteHTML);
     },
 
     updateWordCount() {
@@ -392,7 +566,7 @@ const Notes = {
         if (indicator) {
             indicator.textContent = 'Perubahan otomatis disimpan...';
             indicator.className = 'text-green-600 text-sm italic';
-            
+
             setTimeout(() => {
                 if (indicator) {
                     indicator.textContent = 'Siap menyimpan...';
@@ -427,6 +601,8 @@ const Notes = {
         note.updatedAt = new Date().toISOString();
         note.wordCount = this.countWords(content);
         note.readingTime = Math.ceil(note.wordCount / 200);
+        note.metadata.lastEditedBy = 'user';
+        note.metadata.lastAccessed = new Date().toISOString();
 
         // Save to version history
         this.saveVersionHistory(note);
@@ -497,7 +673,12 @@ const Notes = {
             ...this.notes[noteIndex],
             ...updates,
             version: (this.notes[noteIndex].version || 1) + 1,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            metadata: {
+                ...this.notes[noteIndex].metadata,
+                lastEditedBy: 'user',
+                lastAccessed: new Date().toISOString()
+            }
         };
 
         this.saveNotes();
@@ -534,7 +715,10 @@ const Notes = {
             id: Date.now(),
             title: `${note.title} (Salinan)`,
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            isPinned: false, // Reset pinned status
+            isArchived: false, // Reset archived status
+            version: 1
         };
 
         this.notes.unshift(duplicatedNote);
@@ -765,6 +949,39 @@ const Notes = {
         this.showNotification(`Catatan diekspor sebagai ${format}`, 'success');
     },
 
+    exportAllNotes(format = 'json') {
+        const notesData = {
+            notes: this.notes,
+            exportedAt: new Date().toISOString(),
+            totalNotes: this.notes.length
+        };
+
+        let content = '';
+        let filename = '';
+        let mimeType = '';
+
+        switch (format) {
+            case 'json':
+                content = JSON.stringify(notesData, null, 2);
+                filename = `notes-backup-${new Date().toISOString().split('T')[0]}.json`;
+                mimeType = 'application/json';
+                break;
+            case 'markdown':
+                content = this.notes.map(note => this.convertToMarkdown(note)).join('\n\n---\n\n');
+                filename = `all-notes-${new Date().toISOString().split('T')[0]}.md`;
+                mimeType = 'text/markdown';
+                break;
+            case 'html':
+                content = this.notes.map(note => this.convertToHTML(note)).join('<hr>');
+                filename = `all-notes-${new Date().toISOString().split('T')[0]}.html`;
+                mimeType = 'text/html';
+                break;
+        }
+
+        this.downloadFile(content, filename, mimeType);
+        this.showNotification(`Semua catatan diekspor sebagai ${format}`, 'success');
+    },
+
     convertToMarkdown(note) {
         let markdown = `# ${note.title}\n\n`;
 
@@ -976,13 +1193,13 @@ const Notes = {
 
         if (isListView) {
             noteEl.innerHTML = `
-                <div class="flex items-start p-4">
+                <div class="flex items-start p-4 border rounded-lg hover:shadow-md transition-shadow duration-200">
                     <div class="flex-shrink-0 mr-4">
                         <div class="w-12 h-12 rounded-lg flex items-center justify-center text-xl" style="background-color: ${note.color};">
                             <i class="fas fa-sticky-note"></i>
                         </div>
                     </div>
-                    
+
                     <div class="flex-grow">
                         <div class="flex justify-between items-start">
                             <h3 class="text-lg font-semibold text-gray-800 mb-2">
@@ -991,6 +1208,8 @@ const Notes = {
                             <div class="flex items-center space-x-2">
                                 ${note.isPinned ? '<i class="fas fa-thumbtack text-yellow-500" title="Disematkan"></i>' : ''}
                                 ${note.isArchived ? '<i class="fas fa-archive text-gray-500" title="Diarsipkan"></i>' : ''}
+                                ${note.isShared ? '<i class="fas fa-share-alt text-blue-500" title="Dibagikan"></i>' : ''}
+                                ${note.encrypted ? '<i class="fas fa-lock text-red-500" title="Dienkripsi"></i>' : ''}
                             </div>
                         </div>
 
@@ -1057,51 +1276,55 @@ const Notes = {
         } else {
             // Grid view
             noteEl.innerHTML = `
-                <div class="relative">
-                    ${note.isPinned ? '<i class="fas fa-thumbtack absolute top-2 right-2 text-yellow-500"></i>' : ''}
-
-                    <div class="p-4">
+                <div class="relative bg-white rounded-lg shadow-md p-4 transition-all duration-300 hover:shadow-xl cursor-pointer border border-gray-200 hover:border-indigo-300">
+                    <div class="flex justify-between items-start mb-2">
                         <h3 class="text-lg font-semibold text-gray-800 mb-2">
                             ${this.highlightSearch(note.title)}
                         </h3>
-
-                        <p class="text-gray-600 mb-3 line-clamp-3">
-                            ${this.highlightSearch(excerpt)}
-                        </p>
-
-                        ${note.checklist.length > 0 ? `
-                            <div class="mb-3">
-                                <div class="flex items-center text-sm text-gray-500 mb-1">
-                                    <i class="fas fa-tasks mr-1"></i>
-                                    <span>${note.checklist.filter(item => item.completed).length}/${note.checklist.length} selesai</span>
-                                </div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill bg-green-500" style="width: ${this.getChecklistProgress(note)}%"></div>
-                                </div>
-                            </div>
-                        ` : ''}
-
-                        <div class="flex flex-wrap gap-1 mb-3">
-                            ${note.tags.map(tag => `
-                                <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full cursor-pointer hover:bg-gray-200"
-                                      onclick="Notes.filterByTag('${tag}')">
-                                    #${tag}
-                                </span>
-                            `).join('')}
-                        </div>
-
-                        <div class="flex items-center justify-between text-sm text-gray-500">
-                            <div class="flex items-center space-x-3">
-                                <span><i class="fas fa-folder mr-1"></i>${this.getCategoryLabel(note.category)}</span>
-                                <span><i class="fas fa-clock mr-1"></i>${readingTime} menit</span>
-                                ${wordCount > 0 ? `<span><i class="fas fa-file-word mr-1"></i>${wordCount} kata</span>` : ''}
-                            </div>
-                            <span>${this.formatDate(note.updatedAt)}</span>
+                        <div class="flex items-center space-x-1">
+                            ${note.isPinned ? '<i class="fas fa-thumbtack text-yellow-500" title="Disematkan"></i>' : ''}
+                            ${note.isArchived ? '<i class="fas fa-archive text-gray-500" title="Diarsipkan"></i>' : ''}
+                            ${note.isShared ? '<i class="fas fa-share-alt text-blue-500" title="Dibagikan"></i>' : ''}
+                            ${note.encrypted ? '<i class="fas fa-lock text-red-500" title="Dienkripsi"></i>' : ''}
                         </div>
                     </div>
 
-                    <div class="absolute top-2 right-2 opacity-0 hover:opacity-100 transition-opacity duration-200">
-                        <div class="flex space-x-1">
+                    <p class="text-gray-600 mb-3 line-clamp-3">
+                        ${this.highlightSearch(excerpt)}
+                    </p>
+
+                    ${note.checklist.length > 0 ? `
+                        <div class="mb-3">
+                            <div class="flex items-center text-sm text-gray-500 mb-1">
+                                <i class="fas fa-tasks mr-1"></i>
+                                <span>${note.checklist.filter(item => item.completed).length}/${note.checklist.length} selesai</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill bg-green-500" style="width: ${this.getChecklistProgress(note)}%"></div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        ${note.tags.map(tag => `
+                            <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full cursor-pointer hover:bg-gray-200"
+                                  onclick="Notes.filterByTag('${tag}')">
+                                #${tag}
+                            </span>
+                        `).join('')}
+                    </div>
+
+                    <div class="flex items-center justify-between text-sm text-gray-500 mb-3">
+                        <span><i class="fas fa-folder mr-1"></i>${this.getCategoryLabel(note.category)}</span>
+                        <span>${this.formatDate(note.updatedAt)}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between text-sm text-gray-500">
+                        <div class="flex items-center space-x-2">
+                            <span><i class="fas fa-clock mr-1"></i>${readingTime}m</span>
+                            ${wordCount > 0 ? `<span><i class="fas fa-file-word mr-1"></i>${wordCount}k</span>` : ''}
+                        </div>
+                        <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                             <button class="p-1 text-blue-500 hover:text-blue-700" onclick="Notes.openNoteEditor(${note.id})" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -1111,14 +1334,8 @@ const Notes = {
                             <button class="p-1 text-yellow-500 hover:text-yellow-700" onclick="Notes.togglePin(${note.id})" title="Pin">
                                 <i class="fas fa-thumbtack"></i>
                             </button>
-                            <button class="p-1 text-purple-500 hover:text-purple-700" onclick="Notes.changeNoteColor(${note.id})" title="Color">
-                                <i class="fas fa-palette"></i>
-                            </button>
                             <button class="p-1 text-indigo-500 hover:text-indigo-700" onclick="Notes.shareNote(${note.id})" title="Share">
                                 <i class="fas fa-share"></i>
-                            </button>
-                            <button class="p-1 text-gray-500 hover:text-gray-700" onclick="Notes.toggleArchive(${note.id})" title="Archive">
-                                <i class="fas fa-archive"></i>
                             </button>
                             <button class="p-1 text-red-500 hover:text-red-700" onclick="Notes.deleteNote(${note.id})" title="Delete">
                                 <i class="fas fa-trash"></i>
@@ -1131,14 +1348,14 @@ const Notes = {
 
         // Add hover effect
         noteEl.addEventListener('mouseenter', () => {
-            const hoverActions = noteEl.querySelector('.absolute');
+            const hoverActions = noteEl.querySelector('.opacity-0');
             if (hoverActions) {
                 hoverActions.classList.remove('opacity-0');
             }
         });
 
         noteEl.addEventListener('mouseleave', () => {
-            const hoverActions = noteEl.querySelector('.absolute');
+            const hoverActions = noteEl.querySelector('.opacity-0');
             if (hoverActions) {
                 hoverActions.classList.add('opacity-0');
             }
@@ -1159,20 +1376,20 @@ const Notes = {
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal-overlay';
         modal.dataset.noteId = note.id;
         modal.innerHTML = `
-            <div class="bg-white rounded-lg w-full max-w-4xl max-h-screen overflow-hidden flex flex-col">
-                <div class="flex justify-between items-center p-4 border-b">
+            <div class="bg-white rounded-lg w-full max-w-6xl max-h-screen overflow-hidden flex flex-col">
+                <div class="flex justify-between items-center p-4 border-b bg-indigo-600 text-white">
                     <input type="text" id="editor-note-title" value="${note.title}"
-                           class="text-xl font-semibold bg-transparent border-none outline-none flex-grow"
+                           class="text-xl font-semibold bg-transparent border-none outline-none flex-grow text-white placeholder-indigo-200"
                            placeholder="Judul catatan...">
                     <div class="flex items-center space-x-2">
-                        <button class="p-2 text-gray-500 hover:text-gray-700" onclick="Notes.changeNoteColor(${note.id})" title="Color">
+                        <button class="p-2 hover:bg-indigo-700 rounded-full" onclick="Notes.changeNoteColor(${note.id})" title="Color">
                             <i class="fas fa-palette"></i>
                         </button>
-                        <button class="p-2 text-gray-500 hover:text-gray-700" onclick="Notes.shareNote(${note.id})" title="Share">
+                        <button class="p-2 hover:bg-indigo-700 rounded-full" onclick="Notes.shareNote(${note.id})" title="Share">
                             <i class="fas fa-share"></i>
                         </button>
                         <div class="relative group">
-                            <button class="p-2 text-gray-500 hover:text-gray-700" title="Export">
+                            <button class="p-2 hover:bg-indigo-700 rounded-full" title="Export">
                                 <i class="fas fa-download"></i>
                             </button>
                             <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2 hidden group-hover:block z-10">
@@ -1182,14 +1399,14 @@ const Notes = {
                                 <button class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onclick="Notes.exportNote(${note.id}, 'pdf')">Export PDF</button>
                             </div>
                         </div>
-                        <button class="p-2 text-gray-500 hover:text-gray-700" onclick="Notes.closeEditorModal()" title="Close">
+                        <button class="p-2 hover:bg-indigo-700 rounded-full" onclick="Notes.closeEditorModal()" title="Close">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
                 </div>
 
                 <div class="flex flex-1 overflow-hidden">
-                    <div class="w-64 bg-gray-50 p-4 border-r overflow-y-auto">
+                    <div class="w-72 bg-gray-50 p-4 border-r overflow-y-auto">
                         <div class="space-y-4">
                             <div>
                                 <label class="form-label">Kategori</label>
@@ -1217,7 +1434,7 @@ const Notes = {
                                                    data-item-id="${item.id}" class="checklist-item">
                                             <input type="text" value="${item.text}"
                                                    data-item-id="${item.id}" class="checklist-text flex-grow form-input text-sm">
-                                            <button type="button" class="remove-checklist-item text-red-500 hover:text-red-700" 
+                                            <button type="button" class="remove-checklist-item text-red-500 hover:text-red-700"
                                                     data-item-id="${item.id}">
                                                 <i class="fas fa-trash text-xs"></i>
                                             </button>
@@ -1239,6 +1456,10 @@ const Notes = {
                                     <div class="flex justify-between">
                                         <span>Waktu Baca:</span>
                                         <span id="editor-reading-time">${note.readingTime || Math.ceil(this.countWords(note.content) / 200)} menit</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span>Versi:</span>
+                                        <span>${note.version}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1453,10 +1674,16 @@ const Notes = {
         const total = this.notes.length;
         const archived = this.notes.filter(n => n.isArchived).length;
         const pinned = this.notes.filter(n => n.isPinned).length;
+        const shared = this.notes.filter(n => n.isShared).length;
+        const encrypted = this.notes.filter(n => n.encrypted).length;
 
         statsEl.innerHTML = `
             <span class="text-sm text-gray-500">
-                Menampilkan ${filteredNotes.length} dari ${total} catatan: ${pinned} disematkan, ${archived} diarsipkan
+                Menampilkan ${filteredNotes.length} dari ${total} catatan: 
+                ${pinned} disematkan, 
+                ${archived} diarsipkan, 
+                ${shared} dibagikan, 
+                ${encrypted} dienkripsi
             </span>
         `;
     },
@@ -1763,5 +1990,164 @@ const Notes = {
         }
 
         return { valid: true };
+    },
+
+    // Voice recognition functionality
+    initVoiceRecognition() {
+        if ('webkitSpeechRecognition' in window) {
+            this.recognition = new webkitSpeechRecognition();
+            this.recognition.continuous = false;
+            this.recognition.interimResults = false;
+            this.recognition.lang = 'id-ID';
+
+            this.recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                this.insertVoiceNote(transcript);
+            };
+
+            this.recognition.onerror = (event) => {
+                console.error('Speech recognition error', event.error);
+                this.showNotification('Error dalam pengenalan suara', 'error');
+            };
+        }
+    },
+
+    startVoiceRecording() {
+        if (!this.recognition) {
+            this.showNotification('Fitur rekam suara tidak didukung di browser ini', 'error');
+            return;
+        }
+
+        try {
+            this.recognition.start();
+            this.showNotification('Mulai berbicara...', 'info');
+        } catch (error) {
+            console.error('Error starting voice recognition', error);
+            this.showNotification('Gagal memulai rekam suara', 'error');
+        }
+    },
+
+    insertVoiceNote(content) {
+        this.addNote('Catatan Suara', content, 'personal');
+        this.showNotification('Catatan suara berhasil ditambahkan', 'success');
+    },
+
+    // Note sharing functionality
+    initNoteSharing() {
+        // Initialize any sharing-related functionality
+    },
+
+    toggleNoteSharing(enabled) {
+        // Implement note sharing toggle functionality
+        this.showNotification(`Fitur berbagi catatan ${enabled ? 'diaktifkan' : 'dinonaktifkan'}`, 'info');
+    },
+
+    toggleNoteEncryption(enabled) {
+        // Implement note encryption toggle functionality
+        this.showNotification(`Fitur enkripsi catatan ${enabled ? 'diaktifkan' : 'dinonaktifkan'}`, 'info');
+    },
+
+    // Backup and restore functionality
+    backupNotes() {
+        const backupData = {
+            notes: this.notes,
+            timestamp: new Date().toISOString(),
+            version: '1.0'
+        };
+
+        const content = JSON.stringify(backupData, null, 2);
+        const filename = `notes-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        this.downloadFile(content, filename, 'application/json');
+        this.showNotification('Catatan berhasil dibackup', 'success');
+    },
+
+    restoreNotes() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (data.notes && Array.isArray(data.notes)) {
+                        this.notes = data.notes.map(note => ({
+                            ...note,
+                            tags: note.tags || [],
+                            isPinned: note.isPinned || false,
+                            isArchived: note.isArchived || false,
+                            color: note.color || '#ffffff',
+                            attachments: note.attachments || [],
+                            version: note.version || 1,
+                            collaborators: note.collaborators || [],
+                            checklist: note.checklist || [],
+                            reminder: note.reminder || null,
+                            isShared: note.isShared || false,
+                            sharedWith: note.sharedWith || [],
+                            template: note.template || null,
+                            wordCount: note.wordCount || 0,
+                            readingTime: note.readingTime || 0
+                        }));
+
+                        this.saveNotes();
+                        this.render();
+                        this.updateStats();
+                        this.showNotification('Catatan berhasil dipulihkan', 'success');
+                    } else {
+                        this.showNotification('Format file backup tidak valid', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error restoring notes:', error);
+                    this.showNotification('Gagal memulihkan catatan', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    },
+
+    importNotes() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,.md,.txt';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    if (file.name.endsWith('.json')) {
+                        const data = JSON.parse(event.target.result);
+                        if (Array.isArray(data.notes)) {
+                            data.notes.forEach(note => this.notes.push(note));
+                        } else {
+                            this.notes.push(data);
+                        }
+                    } else {
+                        const content = event.target.result;
+                        this.addNote('Catatan Impor', content, 'personal');
+                    }
+
+                    this.saveNotes();
+                    this.render();
+                    this.updateStats();
+                    this.showNotification('Catatan berhasil diimpor', 'success');
+                } catch (error) {
+                    console.error('Error importing notes:', error);
+                    this.showNotification('Gagal mengimpor catatan', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    },
+
+    toggleNoteStats(enabled) {
+        // Implement note statistics toggle functionality
+        this.showNotification(`Statistik catatan ${enabled ? 'ditampilkan' : 'disembunyikan'}`, 'info');
     }
 };

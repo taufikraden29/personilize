@@ -18,7 +18,7 @@ const App = {
         Pomodoro.init();
         Habits.init();
         Achievements.init();
-        Dashboard.init();
+        // Dashboard will be initialized when the tab is shown
 
         // Initialize new modules
         Calendar.init();
@@ -182,8 +182,12 @@ const App = {
         // Update specific tab content
         switch (tabName) {
             case 'dashboard':
-                Dashboard.updateDashboard();
-                Dashboard.setupCharts();
+                if (typeof Dashboard.init === 'function') {
+                    Dashboard.init();
+                } else {
+                    Dashboard.updateDashboard();
+                    Dashboard.setupCharts();
+                }
                 break;
             case 'todo':
                 Todo.render();

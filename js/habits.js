@@ -4,6 +4,7 @@ const Habits = {
     filters: {
         status: 'all',
         frequency: 'all',
+        frequencyFilter: 'all',
         search: ''
     },
     sorting: {
@@ -18,6 +19,7 @@ const Habits = {
         this.render();
         this.updateStats();
         this.checkStreaks();
+        this.setupReminderNotifications();
     },
 
     loadHabits() {
@@ -39,7 +41,11 @@ const Habits = {
             reward: habit.reward || '',
             notes: habit.notes || '',
             createdAt: habit.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            goals: habit.goals || {
+                targetDays: 30,
+                targetStreak: 21
+            }
         }));
 
         this.saveHabits();
@@ -62,11 +68,19 @@ const Habits = {
 
         // Filter controls
         const filterSelect = document.getElementById('habit-filter');
+        const frequencyFilterSelect = document.getElementById('habit-frequency-filter');
         const searchInput = document.getElementById('habit-search');
 
         if (filterSelect) {
             filterSelect.addEventListener('change', () => {
                 this.setFilter('status', filterSelect.value);
+                this.render();
+            });
+        }
+
+        if (frequencyFilterSelect) {
+            frequencyFilterSelect.addEventListener('change', () => {
+                this.setFilter('frequencyFilter', frequencyFilterSelect.value);
                 this.render();
             });
         }
@@ -88,6 +102,15 @@ const Habits = {
                 this.render();
             });
         }
+
+        // Modal close buttons
+        document.getElementById('close-history-modal')?.addEventListener('click', () => {
+            document.getElementById('habit-history-modal').classList.add('hidden');
+        });
+
+        document.getElementById('close-calendar-modal')?.addEventListener('click', () => {
+            document.getElementById('habit-calendar-modal').classList.add('hidden');
+        });
     },
 
     setupKeyboardShortcuts() {
@@ -127,13 +150,17 @@ const Habits = {
             streak: 0,
             bestStreak: 0,
             reminderTime: null,
-            color: '#6366f1',
-            icon: 'fa-check',
+            color: this.getRandomColor(),
+            icon: this.getRandomIcon(),
             difficulty: difficulty.value || 'medium',
             reward: '',
             notes: '',
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            goals: {
+                targetDays: 30,
+                targetStreak: 21
+            }
         };
 
         this.habits.unshift(habit);
@@ -365,6 +392,24 @@ const Habits = {
         this.filters[filterType] = value;
     },
 
+    getRandomColor() {
+        const colors = [
+            '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#ef4444',
+            '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e',
+            '#10b981', '#06b6d4', '#0ea5e9', '#3b82f6', '#8b5cf6'
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+    },
+
+    getRandomIcon() {
+        const icons = [
+            'fa-check', 'fa-heart', 'fa-star', 'fa-fire', 'fa-dumbbell',
+            'fa-book', 'fa-code', 'fa-palette', 'fa-bolt', 'fa-music',
+            'fa-running', 'fa-apple-alt', 'fa-bed', 'fa-mug-hot', 'fa-seedling'
+        ];
+        return icons[Math.floor(Math.random() * icons.length)];
+    },
+
     getFilteredHabits() {
         let filtered = [...this.habits];
 
@@ -386,8 +431,8 @@ const Habits = {
         }
 
         // Frequency filter
-        if (this.filters.frequency !== 'all') {
-            filtered = filtered.filter(h => h.frequency === this.filters.frequency);
+        if (this.filters.frequencyFilter !== 'all') {
+            filtered = filtered.filter(h => h.frequency === this.filters.frequencyFilter);
         }
 
         // Search filter
@@ -406,6 +451,9 @@ const Habits = {
             if (this.sorting.field === 'streak' || this.sorting.field === 'bestStreak') {
                 aValue = a[this.sorting.field] || 0;
                 bValue = b[this.sorting.field] || 0;
+            } else if (this.sorting.field === 'completion') {
+                aValue = this.calculateCompletionRate(a);
+                bValue = this.calculateCompletionRate(b);
             }
 
             if (this.sorting.order === 'asc') {
@@ -456,19 +504,12 @@ const Habits = {
 
     createHabitElement(habit) {
         const habitEl = document.createElement('div');
-        habitEl.className = 'habit-card';
+        habitEl.className = 'habit-card bg-white rounded-xl shadow-lg p-5 transition-all duration-300 hover:shadow-xl border border-gray-100';
         habitEl.dataset.id = habit.id;
 
         const today = new Date().toISOString().split('T')[0];
         const isCompletedToday = habit.completedDates.includes(today);
-
-        // Calculate completion rate for the last 30 days
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-        const recentDates = habit.completedDates.filter(date => date >= thirtyDaysAgoStr);
-        const completionRate = Math.round((recentDates.length / 30) * 100);
+        const completionRate = this.calculateCompletionRate(habit);
 
         // Generate calendar for the last 30 days
         let calendarHtml = '';
@@ -481,8 +522,8 @@ const Habits = {
             const bgColor = isCompleted ? habit.color : '#e5e7eb';
             const title = date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 
-            calendarHtml += `<div class="w-6 h-6 rounded-sm cursor-pointer hover:scale-110 transition-transform" 
-                                   style="background-color: ${bgColor}" 
+            calendarHtml += `<div class="w-5 h-5 rounded-sm cursor-pointer hover:scale-110 transition-transform"
+                                   style="background-color: ${bgColor}"
                                    title="${title}"
                                    onclick="Habits.showHabitDetails(${habit.id}, '${dateStr}')"></div>`;
         }
@@ -525,12 +566,12 @@ const Habits = {
             <div class="flex justify-between items-start mb-3">
                 <div class="flex-grow">
                     <div class="flex items-center mb-2">
-                        <div class="w-10 h-10 rounded-full flex items-center justify-center mr-3" 
-                             style="background-color: ${habit.color}20">
-                            <i class="fas ${habit.icon}" style="color: ${habit.color}"></i>
+                        <div class="w-12 h-12 rounded-full flex items-center justify-center mr-3 shadow-sm"
+                             style="background-color: ${habit.color}20; border: 2px solid ${habit.color}40">
+                            <i class="fas ${habit.icon} text-xl" style="color: ${habit.color}"></i>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold text-gray-800">${habit.name}</h3>
+                            <h3 class="text-lg font-bold text-gray-800">${habit.name}</h3>
                             <div class="flex items-center space-x-2 mt-1">
                                 <span class="px-2 py-1 rounded-full text-xs ${categoryColors[habit.category] || categoryColors.other}">
                                     ${categoryLabels[habit.category] || categoryLabels.other}
@@ -546,40 +587,63 @@ const Habits = {
                 </div>
                 <div class="flex items-center space-x-2">
                     ${habit.streak > 0 ? `
-                        <span class="habit-streak ${this.getStreakClass(habit.streak)}">
+                        <span class="habit-streak ${this.getStreakClass(habit.streak)} px-3 py-1 rounded-full">
                             <i class="fas fa-fire mr-1"></i>${habit.streak} hari
                         </span>
                     ` : ''}
-                    <button class="edit-habit text-blue-500 hover:text-blue-700" data-id="${habit.id}" title="Edit">
+                    <button class="edit-habit text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 transition-colors" data-id="${habit.id}" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="delete-habit text-red-500 hover:text-red-700" data-id="${habit.id}" title="Delete">
+                    <button class="delete-habit text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors" data-id="${habit.id}" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </div>
-            
+
             <div class="mb-3">
                 <div class="flex justify-between items-center mb-1">
                     <span class="text-sm text-gray-600">Tingkat penyelesaian (30 hari terakhir)</span>
                     <span class="text-sm font-semibold text-gray-800">${completionRate}%</span>
                 </div>
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div class="h-2 rounded-full transition-all duration-500" 
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="h-2.5 rounded-full transition-all duration-500 ease-out"
                          style="width: ${completionRate}%; background-color: ${habit.color}"></div>
                 </div>
             </div>
-            
-            <div class="mb-3">
+
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-600">Target: ${habit.goals.targetStreak} hari</span>
+                    <span class="text-sm font-semibold text-gray-800">Streak: ${habit.streak}/${habit.goals.targetStreak}</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="h-2.5 rounded-full transition-all duration-500 ease-out"
+                         style="width: ${Math.min(100, (habit.streak / habit.goals.targetStreak) * 100)}%; background-color: #f59e0b"></div>
+                </div>
+            </div>
+
+            <div class="mb-4">
                 <p class="text-sm text-gray-600 mb-2">Kalender 30 hari terakhir:</p>
-                <div class="flex flex-wrap gap-1">
+                <div class="flex flex-wrap gap-1 justify-center">
                     ${calendarHtml}
                 </div>
             </div>
-            
-            <div class="flex justify-center">
-                <button class="toggle-habit px-4 py-2 ${isCompletedToday ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-200 hover:bg-gray-300'} text-${isCompletedToday ? 'white' : 'gray-800'} rounded-lg transition" data-id="${habit.id}">
+
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button class="toggle-habit px-4 py-2 ${isCompletedToday ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-200 hover:bg-gray-300'} text-${isCompletedToday ? 'white' : 'gray-800'} rounded-lg transition font-medium flex-1" data-id="${habit.id}">
                     ${isCompletedToday ? '<i class="fas fa-check mr-2"></i> Selesai Hari Ini' : '<i class="fas fa-circle mr-2"></i> Tandai Selesai'}
+                </button>
+                <button class="view-history px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition font-medium flex-1" data-id="${habit.id}">
+                    <i class="fas fa-history mr-2"></i> Riwayat
+                </button>
+            </div>
+
+            <div class="mt-3 flex justify-center space-x-2">
+                <button class="view-calendar px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition" data-id="${habit.id}">
+                    <i class="fas fa-calendar-alt mr-1"></i> Kalender
+                </button>
+                <button class="set-reminder px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition" data-id="${habit.id}">
+                    <i class="fas fa-bell mr-1"></i> Ingatkan
                 </button>
             </div>
         `;
@@ -859,6 +923,9 @@ const Habits = {
         const toggleBtn = habitEl.querySelector('.toggle-habit');
         const editBtn = habitEl.querySelector('.edit-habit');
         const deleteBtn = habitEl.querySelector('.delete-habit');
+        const viewHistoryBtn = habitEl.querySelector('.view-history');
+        const viewCalendarBtn = habitEl.querySelector('.view-calendar');
+        const setReminderBtn = habitEl.querySelector('.set-reminder');
 
         if (toggleBtn) {
             toggleBtn.addEventListener('click', () => {
@@ -875,6 +942,24 @@ const Habits = {
         if (deleteBtn) {
             deleteBtn.addEventListener('click', () => {
                 this.deleteHabit(parseInt(deleteBtn.dataset.id));
+            });
+        }
+
+        if (viewHistoryBtn) {
+            viewHistoryBtn.addEventListener('click', () => {
+                this.showHabitHistory(parseInt(viewHistoryBtn.dataset.id));
+            });
+        }
+
+        if (viewCalendarBtn) {
+            viewCalendarBtn.addEventListener('click', () => {
+                this.showHabitCalendar(parseInt(viewCalendarBtn.dataset.id));
+            });
+        }
+
+        if (setReminderBtn) {
+            setReminderBtn.addEventListener('click', () => {
+                this.setHabitReminder(parseInt(setReminderBtn.dataset.id));
             });
         }
     },
@@ -909,6 +994,302 @@ const Habits = {
         }
     },
 
+    // Additional functionality methods
+    showHabitHistory(habitId) {
+        const habit = this.habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        const modal = document.getElementById('habit-history-modal');
+        const content = document.getElementById('habit-history-content');
+
+        // Sort completed dates in descending order
+        const sortedDates = [...habit.completedDates].sort().reverse();
+
+        let historyHtml = `
+            <h4 class="text-lg font-bold mb-4">${habit.name} - Riwayat Penyelesaian</h4>
+            <div class="mb-4">
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div class="text-center text-xs font-semibold text-gray-500">Sen</div>
+                    <div class="text-center text-xs font-semibold text-gray-500">Sel</div>
+                    <div class="text-center text-xs font-semibold text-gray-500">Rab</div>
+                    <div class="text-center text-xs font-semibold text-gray-500">Kam</div>
+                    <div class="text-center text-xs font-semibold text-gray-500">Jum</div>
+                    <div class="text-center text-xs font-semibold text-gray-500">Sab</div>
+                    <div class="text-center text-xs font-semibold text-gray-500">Min</div>
+                </div>
+                <div class="grid grid-cols-7 gap-1">
+        `;
+
+        // Create calendar view for the last 90 days
+        const today = new Date();
+        for (let i = 89; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            const isCompleted = habit.completedDates.includes(dateStr);
+            const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+            // Add empty cells for the start of the week if needed
+            if (i === 89) {
+                // Add empty cells for days before the first day of the 90-day period
+                const firstDayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to 0=Monday format
+                for (let j = 0; j < firstDayOfWeek; j++) {
+                    historyHtml += `<div class="w-6 h-6 rounded-sm bg-gray-100"></div>`;
+                }
+            }
+
+            const bgColor = isCompleted ? habit.color : '#e5e7eb';
+            const title = date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            historyHtml += `<div class="w-6 h-6 rounded-sm" style="background-color: ${bgColor}" title="${title}"></div>`;
+        }
+
+        historyHtml += `
+                </div>
+            </div>
+            <div class="mb-4">
+                <h5 class="font-semibold mb-2">Tanggal Penyelesaian:</h5>
+                <div class="max-h-60 overflow-y-auto">
+        `;
+
+        if (sortedDates.length > 0) {
+            sortedDates.forEach(date => {
+                const dateObj = new Date(date);
+                const formattedDate = dateObj.toLocaleDateString('id-ID', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                historyHtml += `<div class="py-1 border-b border-gray-100">${formattedDate}</div>`;
+            });
+        } else {
+            historyHtml += `<div class="text-gray-500 py-2">Belum ada tanggal penyelesaian</div>`;
+        }
+
+        historyHtml += `
+                </div>
+            </div>
+            <div class="flex justify-between">
+                <div>
+                    <p class="font-semibold">Total Penyelesaian:</p>
+                    <p>${habit.completedDates.length} kali</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Streak Terbaik:</p>
+                    <p>${habit.bestStreak} hari</p>
+                </div>
+            </div>
+        `;
+
+        content.innerHTML = historyHtml;
+        modal.classList.remove('hidden');
+    },
+
+    showHabitCalendar(habitId) {
+        const habit = this.habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        const modal = document.getElementById('habit-calendar-modal');
+        const content = document.getElementById('habit-calendar-content');
+
+        // Create a monthly calendar view
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+
+        // Get first day of month and number of days in month
+        const firstDay = new Date(currentYear, currentMonth, 1);
+        const lastDay = new Date(currentYear, currentMonth + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startDay = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+        let calendarHtml = `
+            <h4 class="text-lg font-bold mb-4">${habit.name} - Kalender Bulan Ini</h4>
+            <div class="text-center mb-4">
+                <h5 class="text-xl font-bold">${firstDay.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</h5>
+            </div>
+            <div class="grid grid-cols-7 gap-1 mb-2">
+                <div class="text-center text-xs font-semibold text-gray-500">Min</div>
+                <div class="text-center text-xs font-semibold text-gray-500">Sen</div>
+                <div class="text-center text-xs font-semibold text-gray-500">Sel</div>
+                <div class="text-center text-xs font-semibold text-gray-500">Rab</div>
+                <div class="text-center text-xs font-semibold text-gray-500">Kam</div>
+                <div class="text-center text-xs font-semibold text-gray-500">Jum</div>
+                <div class="text-center text-xs font-semibold text-gray-500">Sab</div>
+            </div>
+            <div class="grid grid-cols-7 gap-1">
+        `;
+
+        // Add empty cells for days before the first day of the month
+        for (let i = 0; i < startDay; i++) {
+            calendarHtml += `<div class="w-8 h-8 rounded-sm bg-gray-100"></div>`;
+        }
+
+        // Add days of the month
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isCompleted = habit.completedDates.includes(dateStr);
+            const bgColor = isCompleted ? habit.color : '#e5e7eb';
+            const todayClass = day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()
+                ? 'border-2 border-blue-500' : '';
+
+            calendarHtml += `<div class="w-8 h-8 rounded-sm flex items-center justify-center ${todayClass}" style="background-color: ${bgColor}" title="${dateStr}">${day}</div>`;
+        }
+
+        calendarHtml += `
+            </div>
+            <div class="mt-4">
+                <div class="flex items-center mb-2">
+                    <div class="w-4 h-4 rounded-sm mr-2" style="background-color: ${habit.color}"></div>
+                    <span class="text-sm">Selesai</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-4 h-4 rounded-sm bg-gray-200 mr-2"></div>
+                    <span class="text-sm">Belum Selesai</span>
+                </div>
+            </div>
+        `;
+
+        content.innerHTML = calendarHtml;
+        modal.classList.remove('hidden');
+    },
+
+    setHabitReminder(habitId) {
+        const habit = this.habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        // Create a reminder modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">Atur Pengingat</h3>
+                    <button class="close-modal text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="form-label block text-sm font-medium text-gray-700 mb-1">Waktu Pengingat</label>
+                        <input type="time" id="reminder-time" value="${habit.reminderTime || '08:00'}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="enable-reminder" ${habit.reminderTime ? 'checked' : ''}
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        <label for="enable-reminder" class="ml-2 block text-sm text-gray-900">Aktifkan Pengingat</label>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button class="btn btn-ghost px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Batal
+                    </button>
+                    <button class="btn btn-primary px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                        Simpan Pengingat
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Add event listeners
+        const closeBtn = modal.querySelector('.close-modal');
+        const cancelBtn = modal.querySelector('.btn-ghost');
+        const saveBtn = modal.querySelector('.btn-primary');
+        const enableCheckbox = modal.querySelector('#enable-reminder');
+        const timeInput = modal.querySelector('#reminder-time');
+
+        const closeModal = () => modal.remove();
+
+        closeBtn?.addEventListener('click', closeModal);
+        cancelBtn?.addEventListener('click', closeModal);
+
+        saveBtn?.addEventListener('click', () => {
+            const reminderTime = enableCheckbox.checked ? timeInput.value : null;
+            this.updateHabit(habitId, { reminderTime });
+            closeModal();
+        });
+
+        document.body.appendChild(modal);
+    },
+
+    setupReminderNotifications() {
+        // Check for reminders every minute
+        setInterval(() => {
+            this.checkReminders();
+        }, 60000); // 60 seconds
+    },
+
+    checkReminders() {
+        const now = new Date();
+        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        this.habits.forEach(habit => {
+            if (habit.reminderTime && habit.reminderTime === currentTime) {
+                // Check if habit was not completed today
+                const today = now.toISOString().split('T')[0];
+                if (!habit.completedDates.includes(today)) {
+                    this.showNotification(`Waktunya ${habit.name}! Jangan lupa untuk menyelesaikan kebiasaan ini hari ini.`, 'info');
+                }
+            }
+        });
+    },
+
+    exportHabits() {
+        const dataStr = JSON.stringify(this.habits, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+
+        const exportFileDefaultName = `habits-export-${new Date().toISOString().slice(0, 10)}.json`;
+
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    },
+
+    calculateCompletionRate(habit) {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+        const recentDates = habit.completedDates.filter(date => date >= thirtyDaysAgoStr);
+
+        // Calculate possible completions based on frequency
+        const daysSinceStart = Math.floor((new Date() - new Date(thirtyDaysAgoStr)) / (1000 * 60 * 60 * 24));
+
+        let possibleCompletions = 0;
+        switch (habit.frequency) {
+            case 'daily':
+                possibleCompletions = daysSinceStart;
+                break;
+            case 'weekly':
+                possibleCompletions = Math.floor(daysSinceStart / 7);
+                break;
+            case 'monthly':
+                possibleCompletions = Math.floor(daysSinceStart / 30);
+                break;
+        }
+
+        return possibleCompletions > 0 ? Math.round((recentDates.length / possibleCompletions) * 100) : 0;
+    },
+
+    updateStats() {
+        const stats = this.getStatistics();
+
+        // Update the new stats elements in the UI
+        document.getElementById('total-habits-count').textContent = stats.totalHabits;
+        document.getElementById('completed-today-count').textContent = stats.completedToday;
+        document.getElementById('active-streaks-count').textContent = stats.activeStreaks;
+        document.getElementById('completion-rate').textContent = `${stats.completionRate30Days}%`;
+
+        // Also update the original element if it exists
+        const activeHabitsCount = document.getElementById('active-habits-count');
+        if (activeHabitsCount) {
+            activeHabitsCount.textContent = stats.totalHabits;
+        }
+    },
+
     getStatistics() {
         const today = new Date().toISOString().split('T')[0];
         const thirtyDaysAgo = new Date();
@@ -919,7 +1300,7 @@ const Habits = {
             totalHabits: this.habits.length,
             completedToday: this.habits.filter(h => h.completedDates.includes(today)).length,
             activeStreaks: this.habits.filter(h => h.streak > 0).length,
-            averageStreak: Math.round(this.habits.reduce((sum, h) => sum + h.streak, 0) / this.habits.length),
+            averageStreak: this.habits.length > 0 ? Math.round(this.habits.reduce((sum, h) => sum + h.streak, 0) / this.habits.length) : 0,
             bestStreak: Math.max(...this.habits.map(h => h.bestStreak), 0),
             completionRate30Days: this.calculateOverallCompletionRate(thirtyDaysAgoStr)
         };

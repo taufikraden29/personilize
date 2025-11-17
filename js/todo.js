@@ -13,15 +13,23 @@ const Todo = {
         order: 'desc'
     },
     selectedIds: new Set(), // For bulk operations
+    collaborators: [], // For task collaboration
+    templates: [], // For task templates
+    dependencies: [], // For task dependencies
 
     init() {
         this.loadTodos();
+        this.loadTemplates();
         this.setupEventListeners();
         this.setupDragAndDrop();
         this.setupKeyboardShortcuts();
+        this.setupCollaboration();
+        this.setupCalendarIntegration();
         this.render();
         this.updateStats();
         this.checkRecurringTodos(); // Check for recurring todos that should be created
+        this.setupNotifications();
+        this.setupTaskSharing();
     },
 
     loadTodos() {
@@ -44,10 +52,87 @@ const Todo = {
             recurrencePattern: todo.recurrencePattern || null,
             lastCompleted: todo.lastCompleted || null,
             notes: todo.notes || '',
-            completedSubtasks: todo.completedSubtasks || 0
+            completedSubtasks: todo.completedSubtasks || 0,
+            collaborators: todo.collaborators || [],
+            dependencies: todo.dependencies || [],
+            progress: todo.progress || 0,
+            impact: todo.impact || 'medium',
+            reflection: todo.reflection || '',
+            achievement: todo.achievement || false,
+            templateId: todo.templateId || null,
+            isShared: todo.isShared || false,
+            sharedWith: todo.sharedWith || []
         }));
 
         this.saveTodos();
+    },
+
+    loadTemplates() {
+        const savedTemplates = Storage.get('todoTemplates');
+        if (savedTemplates) {
+            this.templates = savedTemplates;
+        } else {
+            // Default templates
+            this.templates = [
+                {
+                    id: 'work',
+                    name: 'Tugas Kantor',
+                    text: 'Lakukan tugas kantor',
+                    priority: 'high',
+                    category: 'work',
+                    estimatedTime: 60,
+                    tags: ['kerja', 'penting'],
+                    subtasks: [
+                        { id: Date.now() + 1, text: 'Siapkan dokumen', completed: false },
+                        { id: Date.now() + 2, text: 'Kerjakan proyek', completed: false },
+                        { id: Date.now() + 3, text: 'Review hasil', completed: false }
+                    ]
+                },
+                {
+                    id: 'health',
+                    name: 'Kesehatan',
+                    text: 'Perawatan kesehatan',
+                    priority: 'medium',
+                    category: 'health',
+                    estimatedTime: 30,
+                    tags: ['sehat', 'olahraga'],
+                    subtasks: [
+                        { id: Date.now() + 4, text: 'Olahraga ringan', completed: false },
+                        { id: Date.now() + 5, text: 'Makan sehat', completed: false },
+                        { id: Date.now() + 6, text: 'Istirahat cukup', completed: false }
+                    ]
+                },
+                {
+                    id: 'finance',
+                    name: 'Keuangan',
+                    text: 'Pengelolaan keuangan',
+                    priority: 'high',
+                    category: 'finance',
+                    estimatedTime: 45,
+                    tags: ['keuangan', 'penting'],
+                    subtasks: [
+                        { id: Date.now() + 7, text: 'Cek rekening', completed: false },
+                        { id: Date.now() + 8, text: 'Catat pengeluaran', completed: false },
+                        { id: Date.now() + 9, text: 'Buat anggaran', completed: false }
+                    ]
+                },
+                {
+                    id: 'learning',
+                    name: 'Pembelajaran',
+                    text: 'Belajar keterampilan baru',
+                    priority: 'medium',
+                    category: 'education',
+                    estimatedTime: 120,
+                    tags: ['belajar', 'keterampilan'],
+                    subtasks: [
+                        { id: Date.now() + 10, text: 'Baca materi', completed: false },
+                        { id: Date.now() + 11, text: 'Praktik langsung', completed: false },
+                        { id: Date.now() + 12, text: 'Evaluasi progres', completed: false }
+                    ]
+                }
+            ];
+            Storage.set('todoTemplates', this.templates);
+        }
     },
 
     setupEventListeners() {
@@ -63,6 +148,21 @@ const Todo = {
                     this.addTodo();
                 }
             });
+        }
+
+        // Template buttons
+        const templateBtns = document.querySelectorAll('.template-btn');
+        templateBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const templateId = e.target.closest('.template-btn').dataset.template;
+                this.applyTemplate(templateId);
+            });
+        });
+
+        // Import button
+        const importBtn = document.getElementById('import-todos');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => this.importTodos());
         }
 
         // Recurring checkbox
@@ -108,13 +208,23 @@ const Todo = {
         const bulkActions = document.getElementById('bulk-actions');
         if (bulkActions) {
             bulkActions.addEventListener('click', (e) => {
-                if (e.target.classList.contains('bulk-complete')) {
+                if (e.target.classList.contains('bulk-complete') || e.target.closest('.bulk-complete')) {
                     this.bulkComplete();
-                } else if (e.target.classList.contains('bulk-delete')) {
+                } else if (e.target.classList.contains('bulk-delete') || e.target.closest('.bulk-delete')) {
                     this.bulkDelete();
-                } else if (e.target.classList.contains('bulk-export')) {
+                } else if (e.target.classList.contains('bulk-export') || e.target.closest('.bulk-export')) {
                     this.exportTodos();
+                } else if (e.target.classList.contains('bulk-priority') || e.target.closest('.bulk-priority')) {
+                    this.bulkUpdatePriority();
                 }
+            });
+        }
+
+        // Select all checkbox
+        const selectAllCheckbox = document.getElementById('select-all-todos');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', (e) => {
+                this.selectAllTodos(e.target.checked);
             });
         }
 
@@ -160,6 +270,7 @@ const Todo = {
                     '<i class="fas fa-th-large mr-2"></i> Grid View' :
                     '<i class="fas fa-list mr-2"></i> List View';
                 document.body.classList.toggle('todo-grid-view', currentView === 'list');
+                this.render();
             });
         }
     },
@@ -173,13 +284,14 @@ const Todo = {
         todoList.addEventListener('dragstart', (e) => {
             if (e.target.classList.contains('todo-item')) {
                 draggedElement = e.target;
-                e.target.classList.add('opacity-50');
+                e.target.classList.add('opacity-50', 'shadow-lg');
+                e.dataTransfer.effectAllowed = 'move';
             }
         });
 
         todoList.addEventListener('dragend', (e) => {
             if (e.target.classList.contains('todo-item')) {
-                e.target.classList.remove('opacity-50');
+                e.target.classList.remove('opacity-50', 'shadow-lg');
                 // Update todo order after drag
                 this.updateTodoOrder();
             }
@@ -196,19 +308,44 @@ const Todo = {
         });
     },
 
+    setupCollaboration() {
+        // Initialize collaboration features
+        this.collaborators = Storage.get('todoCollaborators') || [];
+    },
+
+    setupCalendarIntegration() {
+        // Initialize calendar integration
+        if (typeof Calendar !== 'undefined') {
+            // Connect with calendar module if available
+        }
+    },
+
+    setupNotifications() {
+        // Initialize notification system
+        if ('Notification' in window) {
+            if (Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+    },
+
+    setupTaskSharing() {
+        // Initialize task sharing features
+    },
+
     updateTodoOrder() {
         const todoList = document.getElementById('todo-list');
         const todoItems = todoList.querySelectorAll('.todo-item');
-        
+
         // Update the order in the todos array based on DOM order
         const newOrder = Array.from(todoItems).map(item => parseInt(item.dataset.id));
-        
+
         this.todos.sort((a, b) => {
             const aIndex = newOrder.indexOf(a.id);
             const bIndex = newOrder.indexOf(b.id);
             return aIndex - bIndex;
         });
-        
+
         this.saveTodos();
     },
 
@@ -278,8 +415,8 @@ const Todo = {
                 priority: priority && priority.value ? priority.value : 'medium',
                 date: date && date.value ? date.value : new Date().toISOString().split('T')[0],
                 category: (category && category.value) ? category.value : 'personal',
-                tags: tagsInput?.value ? 
-                    tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag) : 
+                tags: tagsInput?.value ?
+                    tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag) :
                     this.extractTags(input.value),
                 subtasks: [],
                 estimatedTime: (estimatedTime && estimatedTime.value) ? parseInt(estimatedTime.value) || 0 : 0,
@@ -291,6 +428,15 @@ const Todo = {
                 recurrencePattern: recurrencePattern || null,
                 lastCompleted: null,
                 completedSubtasks: 0,
+                progress: 0,
+                impact: 'medium',
+                reflection: '',
+                achievement: false,
+                templateId: null,
+                collaborators: [],
+                dependencies: [],
+                isShared: false,
+                sharedWith: [],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -330,6 +476,54 @@ const Todo = {
             console.error('Error adding todo:', error);
             this.showNotification('Gagal menambahkan todo. Silakan coba lagi.', 'error');
         }
+    },
+
+    applyTemplate(templateId) {
+        const template = this.templates.find(t => t.id === templateId);
+        if (!template) return;
+
+        const input = document.getElementById('todo-input');
+        const priority = document.getElementById('todo-priority');
+        const category = document.getElementById('todo-category');
+        const estimatedTime = document.getElementById('todo-estimated-time');
+        const tagsInput = document.getElementById('todo-tags');
+
+        if (input) input.value = template.text;
+        if (priority) priority.value = template.priority;
+        if (category) category.value = template.category;
+        if (estimatedTime) estimatedTime.value = template.estimatedTime;
+        if (tagsInput) tagsInput.value = template.tags.join(', ');
+
+        this.showNotification(`Template "${template.name}" diterapkan`, 'success');
+    },
+
+    importTodos() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = e => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const importedTodos = JSON.parse(e.target.result);
+                    if (Array.isArray(importedTodos)) {
+                        this.todos = [...this.todos, ...importedTodos];
+                        this.saveTodos();
+                        this.render();
+                        this.updateStats();
+                        this.showNotification(`${importedTodos.length} todo berhasil diimpor`, 'success');
+                    } else {
+                        this.showNotification('Format file tidak valid', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error importing todos:', error);
+                    this.showNotification('Gagal mengimpor todo. File tidak valid.', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     },
 
     editTodo(id) {
@@ -380,6 +574,7 @@ const Todo = {
         if (todo.completed) {
             todo.completedAt = new Date().toISOString();
             todo.lastCompleted = new Date().toISOString();
+            todo.progress = 100;
 
             // Complete all subtasks
             todo.subtasks.forEach(subtask => {
@@ -388,6 +583,8 @@ const Todo = {
             todo.completedSubtasks = todo.subtasks.length;
         } else {
             delete todo.completedAt;
+            todo.lastCompleted = null;
+            todo.progress = 0;
             todo.completedSubtasks = todo.subtasks.filter(st => st.completed).length;
         }
 
@@ -401,43 +598,63 @@ const Todo = {
         this.trackActivity(todo.completed ? 'completed' : 'uncompleted', todo);
     },
 
-    deleteTodo(id) {
-        const todoIndex = this.todos.findIndex(t => t.id === id);
-        if (todoIndex === -1) return;
-
-        const todo = this.todos[todoIndex];
-
-        if (confirm(`Apakah Anda yakin ingin menghapus todo "${todo.text}"?`)) {
-            this.todos.splice(todoIndex, 1);
-            this.saveTodos();
-            this.render();
-            this.updateStats();
-
-            this.showNotification('Todo berhasil dihapus', 'success');
-            this.trackActivity('deleted', todo);
-        }
-    },
-
-    duplicateTodo(id) {
+    updateProgress(id, progress) {
         const todo = this.todos.find(t => t.id === id);
         if (!todo) return;
 
-        const duplicatedTodo = {
-            ...todo,
-            id: Date.now(),
-            text: `${todo.text} (Salinan)`,
-            completed: false,
-            completedAt: null,
-            lastCompleted: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
+        todo.progress = Math.max(0, Math.min(100, progress));
+        todo.updatedAt = new Date().toISOString();
 
-        this.todos.unshift(duplicatedTodo);
+        if (todo.progress === 100) {
+            todo.completed = true;
+            todo.completedAt = new Date().toISOString();
+        } else if (todo.completed && todo.progress < 100) {
+            todo.completed = false;
+            delete todo.completedAt;
+        }
+
         this.saveTodos();
         this.render();
+        this.updateStats();
+    },
 
-        this.showNotification('Todo berhasil diduplikasi', 'success');
+    addCollaborator(todoId, collaborator) {
+        const todo = this.todos.find(t => t.id === todoId);
+        if (!todo) return;
+
+        if (!todo.collaborators.some(c => c.id === collaborator.id)) {
+            todo.collaborators.push(collaborator);
+            todo.updatedAt = new Date().toISOString();
+            this.saveTodos();
+            this.render();
+            this.showNotification('Kolaborator ditambahkan', 'success');
+        }
+    },
+
+    removeCollaborator(todoId, collaboratorId) {
+        const todo = this.todos.find(t => t.id === todoId);
+        if (!todo) return;
+
+        todo.collaborators = todo.collaborators.filter(c => c.id !== collaboratorId);
+        todo.updatedAt = new Date().toISOString();
+        this.saveTodos();
+        this.render();
+        this.showNotification('Kolaborator dihapus', 'success');
+    },
+
+    addDependency(todoId, dependencyId) {
+        const todo = this.todos.find(t => t.id === todoId);
+        const dependency = this.todos.find(t => t.id === dependencyId);
+        
+        if (!todo || !dependency) return;
+
+        if (!todo.dependencies.includes(dependencyId)) {
+            todo.dependencies.push(dependencyId);
+            todo.updatedAt = new Date().toISOString();
+            this.saveTodos();
+            this.render();
+            this.showNotification('Dependency ditambahkan', 'success');
+        }
     },
 
     addSubtask(todoId, subtaskText) {
@@ -614,7 +831,7 @@ const Todo = {
             let bValue = b[this.sorting.field];
 
             if (this.sorting.field === 'priority') {
-                const priorityOrder = { high: 3, medium: 2, low: 1 };
+                const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
                 aValue = priorityOrder[a.priority];
                 bValue = priorityOrder[b.priority];
             } else if (this.sorting.field === 'date') {
@@ -673,10 +890,11 @@ const Todo = {
 
     createTodoElement(todo) {
         const todoEl = document.createElement('div');
-        todoEl.className = `todo-item ${todo.completed ? 'todo-completed' : ''} todo-priority-${todo.priority} bg-white rounded-lg shadow p-4 mb-3 transition-all duration-200 border-l-4 ${
-            todo.priority === 'high' ? 'border-red-500' : 
-            todo.priority === 'medium' ? 'border-yellow-500' : 
-            'border-green-500'
+        todoEl.className = `todo-item ${todo.completed ? 'todo-completed' : ''} todo-priority-${todo.priority} bg-white rounded-xl shadow-lg p-5 mb-4 transition-all duration-300 border-l-4 ${
+            todo.priority === 'critical' ? 'border-red-600 bg-red-50' :
+            todo.priority === 'high' ? 'border-red-500 bg-red-25' :
+            todo.priority === 'medium' ? 'border-yellow-500 bg-yellow-25' :
+            'border-green-500 bg-green-25'
         }`;
         todoEl.draggable = true;
         todoEl.dataset.id = todo.id;
@@ -693,57 +911,122 @@ const Todo = {
         todoEl.innerHTML = `
             <div class="flex items-start">
                 <input type="checkbox" ${todo.completed ? 'checked' : ''}
-                       class="mr-3 mt-1 w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 todo-checkbox"
+                       class="mr-4 mt-1 w-6 h-6 text-indigo-600 rounded-full focus:ring-indigo-500 todo-checkbox cursor-pointer"
                        data-id="${todo.id}">
                 <div class="flex-grow">
-                    <div class="flex items-center justify-between mb-1">
-                        <h3 class="${todo.completed ? 'line-through text-gray-500' : 'text-gray-800'} font-medium">
-                            ${this.highlightSearch(todo.text)}
-                        </h3>
-                        <div class="flex items-center space-x-2">
-                            ${this.getPriorityBadge(todo.priority)}
-                            ${this.getCategoryBadge(todo.category)}
-                            ${todo.completed ? `<span class="text-xs text-green-600"><i class="fas fa-check mr-1"></i>Selesai</span>` : ''}
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex-grow">
+                            <h3 class="${todo.completed ? 'line-through text-gray-500' : 'text-gray-800'} font-semibold text-lg mb-1">
+                                ${this.highlightSearch(todo.text)}
+                            </h3>
+                            <div class="flex items-center space-x-3 mb-3">
+                                ${this.getPriorityBadge(todo.priority)}
+                                ${this.getCategoryBadge(todo.category)}
+                                ${todo.completed ? `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center"><i class="fas fa-check mr-1"></i>Selesai</span>` : ''}
+                                ${todo.isShared ? `<span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full flex items-center"><i class="fas fa-share-alt mr-1"></i>Dibagikan</span>` : ''}
+                            </div>
+                            
+                            <!-- Progress Bar -->
+                            <div class="mb-3">
+                                <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                    <span>Progress</span>
+                                    <span>${todo.progress}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-3">
+                                    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out" style="width: ${todo.progress}%"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Subtasks Progress -->
+                            ${todo.subtasks.length > 0 ? `
+                                <div class="mb-3">
+                                    <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                        <span>Subtasks: ${completedSubtasks}/${todo.subtasks.length}</span>
+                                        <span>${progressPercentage}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                        <div class="bg-indigo-500 h-2 rounded-full" style="width: ${progressPercentage}%"></div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        <div class="flex flex-col items-end space-y-2">
+                            <div class="flex items-center space-x-2">
+                                ${todo.collaborators.length > 0 ? `
+                                    <div class="flex -space-x-2">
+                                        ${todo.collaborators.slice(0, 3).map(collaborator => `
+                                            <div class="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs" title="${collaborator.name}">
+                                                ${collaborator.name.charAt(0)}
+                                            </div>
+                                        `).join('')}
+                                        ${todo.collaborators.length > 3 ? `<div class="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-xs">+${todo.collaborators.length - 3}</div>` : ''}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <button class="share-todo text-blue-500 hover:text-blue-700" data-id="${todo.id}" title="Bagikan">
+                                    <i class="fas fa-share-alt"></i>
+                                </button>
+                                <button class="add-collaborator text-indigo-500 hover:text-indigo-700" data-id="${todo.id}" title="Tambah Kolaborator">
+                                    <i class="fas fa-user-plus"></i>
+                                </button>
+                                <button class="add-dependency text-purple-500 hover:text-purple-700" data-id="${todo.id}" title="Tambah Dependency">
+                                    <i class="fas fa-link"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    ${todo.subtasks.length > 0 ? `
-                        <div class="mb-2">
-                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                <span>Progress: ${completedSubtasks}/${todo.subtasks.length}</span>
-                                <span>${progressPercentage}%</span>
-                            </div>
-                            <div class="w-full bg-gray-200 rounded-full h-2">
-                                <div class="bg-indigo-600 h-2 rounded-full" style="width: ${progressPercentage}%"></div>
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-3 text-sm text-gray-500">
-                            <span class="${isOverdue ? 'text-red-600 font-semibold' : isDueToday ? 'text-yellow-600' : isDueSoon ? 'text-orange-600' : ''}">
-                                <i class="fas fa-calendar-alt mr-1"></i>
+                    <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-3">
+                        <div class="flex items-center">
+                            <i class="fas fa-calendar-alt mr-1 text-gray-400"></i>
+                            <span class="${isOverdue ? 'text-red-600 font-semibold' : isDueToday ? 'text-yellow-600 font-semibold' : isDueSoon ? 'text-orange-600' : 'text-gray-600'}">
                                 ${this.formatDate(todo.date)}
                             </span>
-                            ${todo.estimatedTime > 0 ? `
-                                <span><i class="fas fa-clock mr-1"></i>${todo.estimatedTime}m</span>
-                            ` : ''}
-                            ${todo.attachments.length > 0 ? `
-                                <span><i class="fas fa-paperclip mr-1"></i>${todo.attachments.length}</span>
-                            ` : ''}
-                            ${todo.reminders.length > 0 ? `
-                                <span><i class="fas fa-bell mr-1"></i>${todo.reminders.length}</span>
-                            ` : ''}
-                            ${todo.isRecurring ? `
-                                <span class="text-blue-600" title="Todo berulang"><i class="fas fa-sync-alt"></i></span>
-                            ` : ''}
                         </div>
+                        ${todo.estimatedTime > 0 ? `
+                            <div class="flex items-center">
+                                <i class="fas fa-clock mr-1 text-gray-400"></i>
+                                <span>${todo.estimatedTime}m</span>
+                            </div>
+                        ` : ''}
+                        ${todo.actualTime > 0 ? `
+                            <div class="flex items-center">
+                                <i class="fas fa-history mr-1 text-gray-400"></i>
+                                <span>${todo.actualTime}m selesai</span>
+                            </div>
+                        ` : ''}
+                        ${todo.attachments.length > 0 ? `
+                            <div class="flex items-center">
+                                <i class="fas fa-paperclip mr-1 text-gray-400"></i>
+                                <span>${todo.attachments.length}</span>
+                            </div>
+                        ` : ''}
+                        ${todo.reminders.length > 0 ? `
+                            <div class="flex items-center">
+                                <i class="fas fa-bell mr-1 text-gray-400"></i>
+                                <span>${todo.reminders.length}</span>
+                            </div>
+                        ` : ''}
+                        ${todo.isRecurring ? `
+                            <div class="flex items-center text-blue-600">
+                                <i class="fas fa-sync-alt mr-1"></i>
+                                <span>Ulang</span>
+                            </div>
+                        ` : ''}
+                        ${todo.dependencies.length > 0 ? `
+                            <div class="flex items-center text-purple-600">
+                                <i class="fas fa-link mr-1"></i>
+                                <span>${todo.dependencies.length} dependensi</span>
+                            </div>
+                        ` : ''}
                     </div>
 
                     ${todo.tags.length > 0 ? `
-                        <div class="flex flex-wrap gap-1 mt-2">
+                        <div class="flex flex-wrap gap-2 mb-3">
                             ${todo.tags.map(tag => `
-                                <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                <span class="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                                     #${tag}
                                 </span>
                             `).join('')}
@@ -751,26 +1034,54 @@ const Todo = {
                     ` : ''}
 
                     ${todo.notes ? `
-                        <div class="mt-2 text-sm text-gray-600">
-                            <i class="fas fa-sticky-note mr-1"></i>${this.highlightSearch(todo.notes)}
+                        <div class="mt-2 text-sm text-gray-700 p-3 bg-gray-50 rounded-lg">
+                            <i class="fas fa-sticky-note mr-2 text-indigo-500"></i>${this.highlightSearch(todo.notes)}
+                        </div>
+                    ` : ''}
+
+                    ${todo.subtasks.length > 0 ? `
+                        <div class="mt-4">
+                            <h4 class="text-sm font-medium text-gray-700 mb-2">Subtasks:</h4>
+                            <div class="space-y-2">
+                                ${todo.subtasks.map(subtask => `
+                                    <div class="flex items-center text-sm">
+                                        <input type="checkbox" ${subtask.completed ? 'checked' : ''} 
+                                               class="mr-2 h-4 w-4 text-indigo-600 rounded subtask-checkbox" 
+                                               data-todo-id="${todo.id}" data-subtask-id="${subtask.id}">
+                                        <span class="${subtask.completed ? 'line-through text-gray-500' : 'text-gray-700'}">
+                                            ${subtask.text}
+                                        </span>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
                     ` : ''}
                 </div>
             </div>
 
-            <div class="flex items-center space-x-2 ml-4">
-                <button class="expand-todo text-gray-400 hover:text-gray-600" data-id="${todo.id}" title="Expand">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <button class="edit-todo text-blue-500 hover:text-blue-700" data-id="${todo.id}" title="Edit">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="duplicate-todo text-green-500 hover:text-green-700" data-id="${todo.id}" title="Duplicate">
-                    <i class="fas fa-copy"></i>
-                </button>
-                <button class="delete-todo text-red-500 hover:text-red-700" data-id="${todo.id}" title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
+            <div class="flex items-center justify-between pt-4 border-t border-gray-200">
+                <div class="flex items-center space-x-4">
+                    <button class="expand-todo text-gray-500 hover:text-gray-700 flex items-center" data-id="${todo.id}" title="Detail">
+                        <i class="fas fa-info-circle mr-1"></i> Detail
+                    </button>
+                    <button class="edit-todo text-blue-600 hover:text-blue-800 flex items-center" data-id="${todo.id}" title="Edit">
+                        <i class="fas fa-edit mr-1"></i> Edit
+                    </button>
+                    <button class="duplicate-todo text-green-600 hover:text-green-800 flex items-center" data-id="${todo.id}" title="Duplikat">
+                        <i class="fas fa-copy mr-1"></i> Duplikat
+                    </button>
+                    <button class="delete-todo text-red-600 hover:text-red-800 flex items-center" data-id="${todo.id}" title="Hapus">
+                        <i class="fas fa-trash mr-1"></i> Hapus
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button class="progress-decrease text-gray-500 hover:text-gray-700" data-id="${todo.id}" title="Kurangi Progres">
+                        <i class="fas fa-minus-circle"></i>
+                    </button>
+                    <button class="progress-increase text-gray-500 hover:text-gray-700" data-id="${todo.id}" title="Tambah Progres">
+                        <i class="fas fa-plus-circle"></i>
+                    </button>
+                </div>
             </div>
         `;
 
@@ -780,112 +1091,315 @@ const Todo = {
         return todoEl;
     },
 
+    // Event listener attachment methods
+    attachTodoElementEventListeners(todoEl) {
+        const todoId = parseInt(todoEl.dataset.id);
+
+        // Checkbox
+        const checkbox = todoEl.querySelector('input[type="checkbox"].todo-checkbox');
+        if (checkbox) {
+            checkbox.addEventListener('change', () => {
+                this.toggleTodo(todoId);
+                this.updateBulkActions();
+            });
+        }
+
+        // Action buttons
+        const expandBtn = todoEl.querySelector('.expand-todo');
+        const editBtn = todoEl.querySelector('.edit-todo');
+        const duplicateBtn = todoEl.querySelector('.duplicate-todo');
+        const deleteBtn = todoEl.querySelector('.delete-todo');
+        const shareBtn = todoEl.querySelector('.share-todo');
+        const addCollaboratorBtn = todoEl.querySelector('.add-collaborator');
+        const addDependencyBtn = todoEl.querySelector('.add-dependency');
+        const progressIncreaseBtn = todoEl.querySelector('.progress-increase');
+        const progressDecreaseBtn = todoEl.querySelector('.progress-decrease');
+
+        if (expandBtn) {
+            expandBtn.addEventListener('click', () => {
+                this.expandTodo(todoId);
+            });
+        }
+
+        if (editBtn) {
+            editBtn.addEventListener('click', () => {
+                this.editTodo(todoId);
+            });
+        }
+
+        if (duplicateBtn) {
+            duplicateBtn.addEventListener('click', () => {
+                this.duplicateTodo(todoId);
+            });
+        }
+
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                this.deleteTodo(todoId);
+            });
+        }
+
+        if (shareBtn) {
+            shareBtn.addEventListener('click', () => {
+                this.shareTodo(todoId);
+            });
+        }
+
+        if (addCollaboratorBtn) {
+            addCollaboratorBtn.addEventListener('click', () => {
+                this.addCollaborator(todoId, { id: Date.now(), name: 'Contoh Kolaborator' });
+            });
+        }
+
+        if (addDependencyBtn) {
+            addDependencyBtn.addEventListener('click', () => {
+                this.showDependencyModal(todoId);
+            });
+        }
+
+        if (progressIncreaseBtn) {
+            progressIncreaseBtn.addEventListener('click', () => {
+                const todo = this.todos.find(t => t.id === todoId);
+                if (todo) {
+                    this.updateProgress(todoId, Math.min(100, todo.progress + 10));
+                }
+            });
+        }
+
+        if (progressDecreaseBtn) {
+            progressDecreaseBtn.addEventListener('click', () => {
+                const todo = this.todos.find(t => t.id === todoId);
+                if (todo) {
+                    this.updateProgress(todoId, Math.max(0, todo.progress - 10));
+                }
+            });
+        }
+
+        // Subtask checkboxes
+        const subtaskCheckboxes = todoEl.querySelectorAll('.subtask-checkbox');
+        subtaskCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const subtaskId = parseInt(e.target.dataset.subtaskId);
+                this.toggleSubtask(todoId, subtaskId);
+            });
+        });
+    },
+
+    shareTodo(id) {
+        const todo = this.todos.find(t => t.id === id);
+        if (!todo) return;
+
+        // Create share modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal';
+        modal.innerHTML = `
+            <div class="bg-white rounded-xl p-6 w-full max-w-md">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Bagikan Tugas</h2>
+                <div class="mb-4">
+                    <input type="email" id="share-email" placeholder="Masukkan email kolaborator"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                            onclick="this.closest('.modal').remove()">Batal</button>
+                    <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            onclick="Todo.performShare(${todo.id}, document.getElementById('share-email').value)">Bagikan</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+    },
+
+    performShare(todoId, email) {
+        const todo = this.todos.find(t => t.id === todoId);
+        if (!todo || !email) return;
+
+        // In a real implementation, this would send an email or notification
+        // For now, we'll just add the email to the sharedWith array
+        if (!todo.sharedWith.includes(email)) {
+            todo.sharedWith.push(email);
+            todo.isShared = true;
+            todo.updatedAt = new Date().toISOString();
+            this.saveTodos();
+            this.render();
+            this.showNotification(`Tugas dibagikan ke ${email}`, 'success');
+        }
+
+        // Close modal
+        const modal = document.querySelector('.modal');
+        if (modal) modal.remove();
+    },
+
+    showDependencyModal(todoId) {
+        const todo = this.todos.find(t => t.id === todoId);
+        if (!todo) return;
+
+        // Create dependency modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal';
+        modal.innerHTML = `
+            <div class="bg-white rounded-xl p-6 w-full max-w-md">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Tambah Dependency</h2>
+                <div class="mb-4">
+                    <select id="dependency-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="">Pilih tugas yang menjadi dependency...</option>
+                        ${this.todos.filter(t => t.id !== todoId).map(t => `
+                            <option value="${t.id}">${t.text}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                            onclick="this.closest('.modal').remove()">Batal</button>
+                    <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            onclick="Todo.addDependencyFromModal(${todo.id}, document.getElementById('dependency-select').value)">Tambah</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+    },
+
+    addDependencyFromModal(todoId, dependencyId) {
+        if (!dependencyId) return;
+
+        this.addDependency(todoId, parseInt(dependencyId));
+        
+        // Close modal
+        const modal = document.querySelector('.modal');
+        if (modal) modal.remove();
+    },
+
     createEditModal(todo) {
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal';
         modal.innerHTML = `
-            <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-gray-800">Edit Todo</h2>
-                    <button class="close-modal text-gray-500 hover:text-gray-700">
+            <div class="bg-white rounded-xl p-6 w-full max-w-3xl max-h-screen overflow-y-auto shadow-2xl">
+                <div class="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
+                    <h2 class="text-2xl font-bold text-gray-800">Edit Todo</h2>
+                    <button class="close-modal text-gray-500 hover:text-gray-700 text-2xl">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
 
-                <div class="space-y-4">
+                <div class="space-y-6">
                     <div>
-                        <label class="form-label">Text</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Teks Todo</label>
                         <input type="text" id="edit-todo-text" value="${todo.text}"
-                               class="form-input" placeholder="Masukkan todo...">
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg" 
+                               placeholder="Masukkan todo...">
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label class="form-label">Prioritas</label>
-                            <select id="edit-todo-priority" class="form-input">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Prioritas</label>
+                            <select id="edit-todo-priority" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                 <option value="low" ${todo.priority === 'low' ? 'selected' : ''}>Rendah</option>
                                 <option value="medium" ${todo.priority === 'medium' ? 'selected' : ''}>Sedang</option>
                                 <option value="high" ${todo.priority === 'high' ? 'selected' : ''}>Tinggi</option>
+                                <option value="critical" ${todo.priority === 'critical' ? 'selected' : ''}>Kritis</option>
                             </select>
                         </div>
 
                         <div>
-                            <label class="form-label">Kategori</label>
-                            <select id="edit-todo-category" class="form-input">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Kategori</label>
+                            <select id="edit-todo-category" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                 <option value="personal" ${todo.category === 'personal' ? 'selected' : ''}>Pribadi</option>
                                 <option value="work" ${todo.category === 'work' ? 'selected' : ''}>Pekerjaan</option>
                                 <option value="shopping" ${todo.category === 'shopping' ? 'selected' : ''}>Belanja</option>
                                 <option value="health" ${todo.category === 'health' ? 'selected' : ''}>Kesehatan</option>
+                                <option value="education" ${todo.category === 'education' ? 'selected' : ''}>Pendidikan</option>
+                                <option value="finance" ${todo.category === 'finance' ? 'selected' : ''}>Keuangan</option>
                                 <option value="other" ${todo.category === 'other' ? 'selected' : ''}>Lainnya</option>
                             </select>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label class="form-label">Tanggal</label>
-                            <input type="date" id="edit-todo-date" value="${todo.date}" class="form-input">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal</label>
+                            <input type="date" id="edit-todo-date" value="${todo.date}" 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         </div>
 
                         <div>
-                            <label class="form-label">Estimasi Waktu (menit)</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Estimasi Waktu (menit)</label>
                             <input type="number" id="edit-todo-estimated-time" value="${todo.estimatedTime}"
-                                   min="0" class="form-input">
+                                   min="0" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         </div>
                     </div>
 
                     <div>
-                        <label class="form-label">Tags (pisahkan dengan koma)</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Tags (pisahkan dengan koma)</label>
                         <input type="text" id="edit-todo-tags" value="${todo.tags.join(', ')}"
-                               class="form-input" placeholder="tag1, tag2, tag3">
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                               placeholder="tag1, tag2, tag3">
                     </div>
 
                     <div>
-                        <label class="form-label">Catatan</label>
-                        <textarea id="edit-todo-notes" rows="3" class="form-input"
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Catatan</label>
+                        <textarea id="edit-todo-notes" rows="3" 
+                                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                   placeholder="Tambahkan catatan...">${todo.notes || ''}</textarea>
                     </div>
 
                     <div>
-                        <label class="form-label">Pengingat</label>
-                        <div class="grid grid-cols-2 gap-4">
-                            <input type="date" id="edit-todo-reminder-date" class="form-input" placeholder="Tanggal pengingat">
-                            <input type="time" id="edit-todo-reminder-time" class="form-input" placeholder="Waktu pengingat">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Progres (%)</label>
+                        <div class="flex items-center space-x-4">
+                            <input type="range" id="edit-todo-progress" min="0" max="100" value="${todo.progress}"
+                                   class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <span id="progress-value" class="text-lg font-semibold text-indigo-600 w-12">${todo.progress}%</span>
                         </div>
-                        <button type="button" id="add-reminder" class="mt-2 text-indigo-600 hover:text-indigo-800">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Pengingat</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="date" id="edit-todo-reminder-date" class="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Tanggal pengingat">
+                            <input type="time" id="edit-todo-reminder-time" class="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Waktu pengingat">
+                        </div>
+                        <button type="button" id="add-reminder" class="mt-2 px-4 py-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg">
                             <i class="fas fa-plus mr-1"></i> Tambah Pengingat
                         </button>
                     </div>
 
                     <div>
-                        <label class="form-label">Subtasks</label>
-                        <div id="edit-subtasks" class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Subtasks</label>
+                        <div id="edit-subtasks" class="space-y-3">
                             ${todo.subtasks.map((subtask, index) => `
-                                <div class="flex items-center space-x-2">
+                                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                                     <input type="checkbox" ${subtask.completed ? 'checked' : ''}
-                                           data-subtask-id="${subtask.id}" class="subtask-checkbox">
+                                           data-subtask-id="${subtask.id}" class="subtask-checkbox h-5 w-5 text-indigo-600 rounded">
                                     <input type="text" value="${subtask.text}"
-                                           data-subtask-id="${subtask.id}" class="subtask-input flex-grow form-input">
-                                    <button class="remove-subtask text-red-500 hover:text-red-700"
+                                           data-subtask-id="${subtask.id}" class="subtask-input flex-grow px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <button class="remove-subtask text-red-500 hover:text-red-700 p-2"
                                             data-subtask-id="${subtask.id}">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
                             `).join('')}
                         </div>
-                        <button type="button" id="add-subtask" class="mt-2 text-indigo-600 hover:text-indigo-800">
-                            <i class="fas fa-plus mr-1"></i> Tambah Subtask
+                        <button type="button" id="add-subtask" class="mt-3 px-4 py-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg flex items-center">
+                            <i class="fas fa-plus mr-2"></i> Tambah Subtask
                         </button>
                     </div>
 
-                    <div class="flex items-center">
-                        <input type="checkbox" id="edit-todo-recurring" ${todo.isRecurring ? 'checked' : ''} class="mr-2">
-                        <label for="edit-todo-recurring" class="form-label">Todo Berulang</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="edit-todo-recurring" ${todo.isRecurring ? 'checked' : ''} class="h-4 w-4 text-indigo-600 rounded mr-3">
+                            <label for="edit-todo-recurring" class="text-sm font-medium text-gray-700">Todo Berulang</label>
+                        </div>
+
+                        <div class="flex items-center">
+                            <input type="checkbox" id="edit-todo-shared" ${todo.isShared ? 'checked' : ''} class="h-4 w-4 text-indigo-600 rounded mr-3">
+                            <label for="edit-todo-shared" class="text-sm font-medium text-gray-700">Bagikan Tugas</label>
+                        </div>
                     </div>
-                    
+
                     <div id="recurrence-options" class="${todo.isRecurring ? '' : 'hidden'}">
-                        <label class="form-label">Pola Pengulangan</label>
-                        <select id="edit-todo-recurrence-pattern" class="form-input">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Pola Pengulangan</label>
+                        <select id="edit-todo-recurrence-pattern" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="daily" ${todo.recurrencePattern === 'daily' ? 'selected' : ''}>Harian</option>
                             <option value="weekly" ${todo.recurrencePattern === 'weekly' ? 'selected' : ''}>Mingguan</option>
                             <option value="monthly" ${todo.recurrencePattern === 'monthly' ? 'selected' : ''}>Bulanan</option>
@@ -894,11 +1408,13 @@ const Todo = {
                     </div>
                 </div>
 
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button class="btn btn-ghost" onclick="this.closest('.modal').remove()">
+                <div class="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
+                    <button class="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                            onclick="this.closest('.modal').remove()">
                         Batal
                     </button>
-                    <button class="btn btn-primary" id="save-todo-changes">
+                    <button class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition"
+                            id="save-todo-changes">
                         Simpan Perubahan
                     </button>
                 </div>
@@ -909,6 +1425,391 @@ const Todo = {
         this.attachEditModalEventListeners(modal, todo);
 
         return modal;
+    },
+
+    attachEditModalEventListeners(modal, todo) {
+        const closeBtn = modal.querySelector('.close-modal');
+        const saveBtn = modal.querySelector('#save-todo-changes');
+        const addSubtaskBtn = modal.querySelector('#add-subtask');
+        const addReminderBtn = modal.querySelector('#add-reminder');
+        const recurringCheckbox = modal.querySelector('#edit-todo-recurring');
+        const recurrenceOptions = modal.querySelector('#recurrence-options');
+        const progressSlider = modal.querySelector('#edit-todo-progress');
+        const progressValue = modal.querySelector('#progress-value');
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                modal.remove();
+            });
+        }
+
+        if (recurringCheckbox && recurrenceOptions) {
+            recurringCheckbox.addEventListener('change', () => {
+                recurrenceOptions.classList.toggle('hidden', !recurringCheckbox.checked);
+            });
+
+            // Set initial state based on todo
+            if (todo.isRecurring) {
+                recurrenceOptions.classList.remove('hidden');
+            }
+        }
+
+        if (progressSlider && progressValue) {
+            // Update progress value display
+            progressSlider.addEventListener('input', () => {
+                progressValue.textContent = progressSlider.value + '%';
+            });
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                const updates = {
+                    text: Utils.sanitizeHTML(document.getElementById('edit-todo-text').value),
+                    priority: document.getElementById('edit-todo-priority').value,
+                    category: document.getElementById('edit-todo-category').value,
+                    date: document.getElementById('edit-todo-date').value,
+                    estimatedTime: parseInt(document.getElementById('edit-todo-estimated-time').value) || 0,
+                    tags: document.getElementById('edit-todo-tags').value
+                        .split(',')
+                        .map(tag => tag.trim())
+                        .filter(tag => tag),
+                    notes: Utils.sanitizeHTML(document.getElementById('edit-todo-notes').value),
+                    progress: parseInt(document.getElementById('edit-todo-progress').value) || 0,
+                    isRecurring: document.getElementById('edit-todo-recurring').checked,
+                    isShared: document.getElementById('edit-todo-shared').checked,
+                    recurrencePattern: document.getElementById('edit-todo-recurrence-pattern').value,
+                    subtasks: this.getUpdatedSubtasks()
+                };
+
+                this.updateTodo(todo.id, updates);
+                modal.remove();
+            });
+        }
+
+        if (addSubtaskBtn) {
+            addSubtaskBtn.addEventListener('click', () => {
+                this.addNewSubtaskField();
+            });
+        }
+
+        if (addReminderBtn) {
+            addReminderBtn.addEventListener('click', () => {
+                const reminderDate = document.getElementById('edit-todo-reminder-date').value;
+                const reminderTime = document.getElementById('edit-todo-reminder-time').value;
+
+                if (reminderDate && reminderTime) {
+                    this.addReminder(todo.id, reminderDate, reminderTime);
+                    document.getElementById('edit-todo-reminder-date').value = '';
+                    document.getElementById('edit-todo-reminder-time').value = '';
+                } else {
+                    this.showNotification('Silakan masukkan tanggal dan waktu pengingat', 'warning');
+                }
+            });
+        }
+    },
+
+    getUpdatedSubtasks() {
+        const subtaskInputs = document.querySelectorAll('.subtask-input');
+        const subtaskCheckboxes = document.querySelectorAll('.subtask-checkbox');
+
+        return Array.from(subtaskInputs).map((input, index) => ({
+            id: parseInt(input.dataset.subtaskId),
+            text: input.value,
+            completed: subtaskCheckboxes[index].checked
+        }));
+    },
+
+    addNewSubtaskField() {
+        const subtasksContainer = document.getElementById('edit-subtasks');
+        const newSubtaskId = Date.now();
+
+        const subtaskField = document.createElement('div');
+        subtaskField.className = 'flex items-center space-x-3 p-3 bg-gray-50 rounded-lg';
+        subtaskField.innerHTML = `
+            <input type="checkbox" data-subtask-id="${newSubtaskId}" class="subtask-checkbox h-5 w-5 text-indigo-600 rounded">
+            <input type="text" data-subtask-id="${newSubtaskId}" class="subtask-input flex-grow px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                   placeholder="Masukkan subtask...">
+            <button class="remove-subtask text-red-500 hover:text-red-700 p-2" data-subtask-id="${newSubtaskId}">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+
+        subtasksContainer.appendChild(subtaskField);
+
+        // Add event listener to remove button
+        subtaskField.querySelector('.remove-subtask').addEventListener('click', (e) => {
+            subtaskField.remove();
+        });
+    },
+
+    expandTodo(id) {
+        const todo = this.todos.find(t => t.id === id);
+        if (!todo) return;
+
+        // Create expanded view modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal';
+        modal.innerHTML = `
+            <div class="bg-white rounded-xl p-6 w-full max-w-4xl max-h-screen overflow-y-auto shadow-2xl">
+                <div class="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
+                    <h2 class="text-2xl font-bold text-gray-800">Detail Todo</h2>
+                    <button class="close-modal text-gray-500 hover:text-gray-700 text-2xl">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-2">${todo.text}</h3>
+                        <div class="flex flex-wrap items-center gap-3 mb-4">
+                            ${this.getPriorityBadge(todo.priority)}
+                            ${this.getCategoryBadge(todo.category)}
+                            ${todo.completed ? '<span class="px-3 py-1 bg-green-100 text-green-800 rounded-full flex items-center"><i class="fas fa-check mr-1"></i>Selesai</span>' : ''}
+                            ${todo.isRecurring ? '<span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full flex items-center"><i class="fas fa-sync-alt mr-1"></i>Todo Berulang</span>' : ''}
+                            ${todo.isShared ? '<span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full flex items-center"><i class="fas fa-share-alt mr-1"></i>Dibagikan</span>' : ''}
+                        </div>
+                    </div>
+
+                    <!-- Progress Section -->
+                    <div class="bg-gray-50 p-4 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-medium text-gray-700">Progres Tugas</h4>
+                            <span class="text-lg font-semibold text-indigo-600">${todo.progress}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4 mb-4">
+                            <div class="bg-gradient-to-r from-indigo-500 to-purple-600 h-4 rounded-full" style="width: ${todo.progress}%"></div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="text-center p-3 bg-white rounded-lg">
+                                <div class="text-2xl font-bold text-indigo-600">${todo.progress}</div>
+                                <div class="text-sm text-gray-600">Progres</div>
+                            </div>
+                            <div class="text-center p-3 bg-white rounded-lg">
+                                <div class="text-2xl font-bold text-green-600">${todo.subtasks.filter(st => st.completed).length}</div>
+                                <div class="text-sm text-gray-600">Subtask Selesai</div>
+                            </div>
+                            <div class="text-center p-3 bg-white rounded-lg">
+                                <div class="text-2xl font-bold text-blue-600">${todo.estimatedTime}</div>
+                                <div class="text-sm text-gray-600">Menit Estimasi</div>
+                            </div>
+                            <div class="text-center p-3 bg-white rounded-lg">
+                                <div class="text-2xl font-bold text-purple-600">${todo.collaborators.length}</div>
+                                <div class="text-sm text-gray-600">Kolaborator</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-3">Detail Informasi</h4>
+                            <div class="space-y-3">
+                                <div>
+                                    <p class="text-sm text-gray-500">Dibuat</p>
+                                    <p class="font-medium">${new Date(todo.createdAt).toLocaleString('id-ID')}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500">Diperbarui</p>
+                                    <p class="font-medium">${new Date(todo.updatedAt).toLocaleString('id-ID')}</p>
+                                </div>
+                                ${todo.completedAt ? `
+                                <div>
+                                    <p class="text-sm text-gray-500">Selesai</p>
+                                    <p class="font-medium">${new Date(todo.completedAt).toLocaleString('id-ID')}</p>
+                                </div>
+                                ` : ''}
+                                ${todo.date ? `
+                                <div>
+                                    <p class="text-sm text-gray-500">Deadline</p>
+                                    <p class="font-medium">${new Date(todo.date).toLocaleDateString('id-ID')}</p>
+                                </div>
+                                ` : ''}
+                                ${todo.estimatedTime > 0 ? `
+                                <div>
+                                    <p class="text-sm text-gray-500">Estimasi Waktu</p>
+                                    <p class="font-medium">${todo.estimatedTime} menit</p>
+                                </div>
+                                ` : ''}
+                                ${todo.actualTime > 0 ? `
+                                <div>
+                                    <p class="text-sm text-gray-500">Waktu Aktual</p>
+                                    <p class="font-medium">${todo.actualTime} menit</p>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-3">Kolaborator</h4>
+                            <div class="space-y-2 mb-4">
+                                ${todo.collaborators.length > 0 ? todo.collaborators.map(collaborator => `
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div class="flex items-center">
+                                            <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white mr-3">
+                                                ${collaborator.name.charAt(0)}
+                                            </div>
+                                            <span>${collaborator.name}</span>
+                                        </div>
+                                        <button class="remove-collaborator text-red-500 hover:text-red-700" data-collaborator-id="${collaborator.id}" data-todo-id="${todo.id}">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                `).join('') : '<p class="text-gray-500 text-sm">Tidak ada kolaborator</p>'}
+                            </div>
+                            
+                            <button class="add-collaborator-modal px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 text-sm flex items-center w-full"
+                                    data-todo-id="${todo.id}">
+                                <i class="fas fa-user-plus mr-2"></i> Tambah Kolaborator
+                            </button>
+                        </div>
+                    </div>
+
+                    ${todo.notes ? `
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-2">Catatan</h4>
+                            <div class="p-4 bg-gray-50 rounded-lg">
+                                <p class="text-gray-700">${todo.notes}</p>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${todo.tags.length > 0 ? `
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-2">Tags</h4>
+                            <div class="flex flex-wrap gap-2">
+                                ${todo.tags.map(tag => `
+                                    <span class="px-3 py-1 bg-indigo-100 text-indigo-800 text-sm rounded-full">
+                                        #${tag}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${todo.subtasks.length > 0 ? `
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-3">Subtasks</h4>
+                            <div class="space-y-3">
+                                ${todo.subtasks.map(subtask => `
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" ${subtask.completed ? 'checked' : ''} disabled
+                                                   class="mr-3 h-5 w-5 text-indigo-600 rounded">
+                                            <span class="${subtask.completed ? 'line-through text-gray-500' : 'text-gray-700'}">${subtask.text}</span>
+                                        </div>
+                                        <span class="text-sm ${subtask.completed ? 'text-green-600' : 'text-gray-500'}">
+                                            ${subtask.completed ? 'Selesai' : 'Pending'}
+                                        </span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${todo.attachments.length > 0 ? `
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-3">Lampiran</h4>
+                            <div class="space-y-3">
+                                ${todo.attachments.map(attachment => `
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-paperclip text-gray-400 mr-3"></i>
+                                            <span class="text-sm">${attachment.name}</span>
+                                            <span class="text-xs text-gray-500 ml-2">(${this.formatFileSize(attachment.size)})</span>
+                                        </div>
+                                        <button class="download-attachment text-blue-500 hover:text-blue-700 text-sm" 
+                                                data-attachment-id="${attachment.id}" data-todo-id="${todo.id}">
+                                            <i class="fas fa-download mr-1"></i> Download
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${todo.reminders.length > 0 ? `
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-3">Pengingat</h4>
+                            <div class="space-y-3">
+                                ${todo.reminders.map(reminder => `
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div>
+                                            <span class="text-sm">${new Date(reminder.date + ' ' + reminder.time).toLocaleString('id-ID')}</span>
+                                            <span class="text-xs text-gray-500 ml-2">${reminder.triggered ? 'Terpicu' : 'Belum terpicu'}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${todo.dependencies.length > 0 ? `
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-3">Dependency</h4>
+                            <div class="space-y-2">
+                                ${todo.dependencies.map(depId => {
+                                    const depTodo = this.todos.find(t => t.id === depId);
+                                    return depTodo ? `
+                                        <div class="p-3 bg-gray-50 rounded-lg">
+                                            <span class="font-medium">${depTodo.text}</span>
+                                            <span class="text-xs text-gray-500 ml-2">${depTodo.completed ? 'Selesai' : 'Pending'}</span>
+                                        </div>
+                                    ` : '';
+                                }).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="flex justify-end mt-8 pt-6 border-t border-gray-200 space-x-4">
+                    <button class="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                            onclick="this.closest('.modal').remove()">
+                        Tutup
+                    </button>
+                    <button class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition"
+                            onclick="Todo.editTodo(${todo.id}); this.closest('.modal').remove()">
+                        Edit
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Add event listener to close button
+        modal.querySelector('.close-modal').addEventListener('click', () => {
+            modal.remove();
+        });
+
+        // Add event listeners for collaboration features
+        const removeCollaboratorBtns = modal.querySelectorAll('.remove-collaborator');
+        removeCollaboratorBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const todoId = parseInt(e.target.closest('button').dataset.todoId);
+                const collaboratorId = parseInt(e.target.closest('button').dataset.collaboratorId);
+                this.removeCollaborator(todoId, collaboratorId);
+                modal.remove();
+                this.expandTodo(todoId);
+            });
+        });
+
+        const addCollaboratorBtn = modal.querySelector('.add-collaborator-modal');
+        if (addCollaboratorBtn) {
+            addCollaboratorBtn.addEventListener('click', (e) => {
+                const todoId = parseInt(e.target.closest('button').dataset.todoId);
+                this.addCollaborator(todoId, { id: Date.now(), name: 'Contoh Kolaborator' });
+                modal.remove();
+                this.expandTodo(todoId);
+            });
+        }
+
+        const downloadAttachmentBtns = modal.querySelectorAll('.download-attachment');
+        downloadAttachmentBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const todoId = parseInt(e.target.closest('button').dataset.todoId);
+                const attachmentId = parseInt(e.target.closest('button').dataset.attachmentId);
+                this.downloadAttachment(attachmentId, todoId);
+            });
+        });
+
+        document.body.appendChild(modal);
     },
 
     // Helper methods
@@ -927,6 +1828,7 @@ const Todo = {
 
     getPriorityBadge(priority) {
         const badges = {
+            critical: '<span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center"><i class="fas fa-exclamation-triangle mr-1"></i>Kritis</span>',
             high: '<span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Tinggi</span>',
             medium: '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Sedang</span>',
             low: '<span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Rendah</span>'
@@ -936,15 +1838,42 @@ const Todo = {
     },
 
     getCategoryBadge(category) {
-        const badges = {
-            personal: '<span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Pribadi</span>',
-            work: '<span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">Pekerjaan</span>',
-            shopping: '<span class="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">Belanja</span>',
-            health: '<span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Kesehatan</span>',
-            other: '<span class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Lainnya</span>'
+        const colors = {
+            personal: 'bg-blue-100 text-blue-800',
+            work: 'bg-purple-100 text-purple-800',
+            shopping: 'bg-orange-100 text-orange-800',
+            health: 'bg-green-100 text-green-800',
+            education: 'bg-indigo-100 text-indigo-800',
+            finance: 'bg-yellow-100 text-yellow-800',
+            other: 'bg-gray-100 text-gray-800'
         };
 
-        return badges[category] || '';
+        const icons = {
+            personal: 'fas fa-user',
+            work: 'fas fa-briefcase',
+            shopping: 'fas fa-shopping-cart',
+            health: 'fas fa-heartbeat',
+            education: 'fas fa-graduation-cap',
+            finance: 'fas fa-dollar-sign',
+            other: 'fas fa-circle'
+        };
+
+        return `<span class="px-2 py-1 ${colors[category] || colors.other} text-xs rounded-full flex items-center">
+            <i class="${icons[category] || icons.other} mr-1 text-xs"></i>${this.getCategoryName(category)}
+        </span>`;
+    },
+
+    getCategoryName(category) {
+        const names = {
+            personal: 'Pribadi',
+            work: 'Pekerjaan',
+            shopping: 'Belanja',
+            health: 'Kesehatan',
+            education: 'Pendidikan',
+            finance: 'Keuangan',
+            other: 'Lainnya'
+        };
+        return names[category] || 'Lainnya';
     },
 
     formatDate(dateStr) {
@@ -967,18 +1896,11 @@ const Todo = {
     updateFilterButtons(activeBtn) {
         const filterBtns = document.querySelectorAll('.filter-btn');
         filterBtns.forEach(btn => {
-            btn.classList.remove('bg-indigo-200');
+            btn.classList.remove('bg-indigo-100', 'text-indigo-800', 'bg-red-100', 'text-red-800', 'bg-yellow-100', 'text-yellow-800');
+            btn.classList.add('bg-gray-200');
         });
-        activeBtn.classList.add('bg-indigo-200');
-    },
-
-    updateBulkActions() {
-        const bulkActions = document.getElementById('bulk-actions');
-        const checkboxes = document.querySelectorAll('.todo-checkbox:checked');
-
-        if (bulkActions) {
-            bulkActions.style.display = checkboxes.length > 0 ? 'block' : 'none';
-        }
+        activeBtn.classList.remove('bg-gray-200');
+        activeBtn.classList.add('bg-indigo-100', 'text-indigo-800');
     },
 
     updateFilterStats(filteredTodos) {
@@ -989,10 +1911,90 @@ const Todo = {
         const pending = filteredTodos.filter(t => !t.completed).length;
 
         statsEl.innerHTML = `
-            <span class="text-sm text-gray-500">
+            <span class="text-sm text-gray-600">
                 Menampilkan ${filteredTodos.length} todo: ${completed} selesai, ${pending} pending
             </span>
         `;
+    },
+
+    updateBulkActions() {
+        const bulkActions = document.getElementById('bulk-actions');
+        const checkboxes = document.querySelectorAll('.todo-checkbox:checked');
+
+        if (bulkActions) {
+            bulkActions.style.display = checkboxes.length > 0 ? 'block' : 'none';
+            
+            // Update selected count
+            const selectedCount = document.getElementById('selected-count');
+            if (selectedCount) {
+                selectedCount.textContent = checkboxes.length;
+            }
+        }
+    },
+
+    selectAllTodos(checked) {
+        const checkboxes = document.querySelectorAll('.todo-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = checked;
+            if (checked) {
+                this.selectedIds.add(parseInt(checkbox.dataset.id));
+            } else {
+                this.selectedIds.delete(parseInt(checkbox.dataset.id));
+            }
+        });
+        this.updateBulkActions();
+    },
+
+    bulkUpdatePriority() {
+        const checkboxes = document.querySelectorAll('.todo-checkbox:checked');
+        const ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id));
+
+        // Show priority selection modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal';
+        modal.innerHTML = `
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Ubah Prioritas Massal</h2>
+                <div class="space-y-3">
+                    <button class="priority-option w-full px-4 py-3 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 text-left" data-priority="critical">
+                        <i class="fas fa-exclamation-triangle mr-2"></i> Kritis
+                    </button>
+                    <button class="priority-option w-full px-4 py-3 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 text-left" data-priority="high">
+                        <i class="fas fa-exclamation-circle mr-2"></i> Tinggi
+                    </button>
+                    <button class="priority-option w-full px-4 py-3 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 text-left" data-priority="medium">
+                        <i class="fas fa-minus-circle mr-2"></i> Sedang
+                    </button>
+                    <button class="priority-option w-full px-4 py-3 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 text-left" data-priority="low">
+                        <i class="fas fa-check-circle mr-2"></i> Rendah
+                    </button>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button class="btn btn-ghost" onclick="this.closest('.modal').remove()">Batal</button>
+                </div>
+            </div>
+        `;
+
+        // Add event listeners to priority options
+        const priorityOptions = modal.querySelectorAll('.priority-option');
+        priorityOptions.forEach(option => {
+            option.addEventListener('click', (e) => {
+                const priority = e.target.closest('.priority-option').dataset.priority;
+                ids.forEach(id => {
+                    const todo = this.todos.find(t => t.id === id);
+                    if (todo) {
+                        todo.priority = priority;
+                        todo.updatedAt = new Date().toISOString();
+                    }
+                });
+                this.saveTodos();
+                this.render();
+                this.showNotification(`${ids.length} todo diperbarui dengan prioritas ${priority}`, 'success');
+                modal.remove();
+            });
+        });
+
+        document.body.appendChild(modal);
     },
 
     clearFilters() {
@@ -1023,6 +2025,7 @@ const Todo = {
             if (todo && !todo.completed) {
                 todo.completed = true;
                 todo.completedAt = new Date().toISOString();
+                todo.progress = 100;
             }
         });
 
@@ -1051,14 +2054,14 @@ const Todo = {
         const filteredTodos = this.getFilteredTodos();
         const dataStr = JSON.stringify(filteredTodos, null, 2);
         const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-        
+
         const exportFileDefaultName = `todos_export_${new Date().toISOString().slice(0, 10)}.json`;
-        
+
         const linkElement = document.createElement('a');
         linkElement.setAttribute('href', dataUri);
         linkElement.setAttribute('download', exportFileDefaultName);
         linkElement.click();
-        
+
         this.showNotification('Todo berhasil diekspor', 'success');
     },
 
@@ -1161,295 +2164,6 @@ const Todo = {
         }
     },
 
-    // Event listener attachment methods
-    attachTodoElementEventListeners(todoEl) {
-        const todoId = parseInt(todoEl.dataset.id);
-
-        // Checkbox
-        const checkbox = todoEl.querySelector('input[type="checkbox"]');
-        if (checkbox) {
-            checkbox.addEventListener('change', () => {
-                this.toggleTodo(todoId);
-            });
-        }
-
-        // Action buttons
-        const expandBtn = todoEl.querySelector('.expand-todo');
-        const editBtn = todoEl.querySelector('.edit-todo');
-        const duplicateBtn = todoEl.querySelector('.duplicate-todo');
-        const deleteBtn = todoEl.querySelector('.delete-todo');
-
-        if (expandBtn) {
-            expandBtn.addEventListener('click', () => {
-                this.expandTodo(todoId);
-            });
-        }
-
-        if (editBtn) {
-            editBtn.addEventListener('click', () => {
-                this.editTodo(todoId);
-            });
-        }
-
-        if (duplicateBtn) {
-            duplicateBtn.addEventListener('click', () => {
-                this.duplicateTodo(todoId);
-            });
-        }
-
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', () => {
-                this.deleteTodo(todoId);
-            });
-        }
-    },
-
-    attachEditModalEventListeners(modal, todo) {
-        const closeBtn = modal.querySelector('.close-modal');
-        const saveBtn = modal.querySelector('#save-todo-changes');
-        const addSubtaskBtn = modal.querySelector('#add-subtask');
-        const addReminderBtn = modal.querySelector('#add-reminder');
-        const recurringCheckbox = modal.querySelector('#edit-todo-recurring');
-        const recurrenceOptions = modal.querySelector('#recurrence-options');
-
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                modal.remove();
-            });
-        }
-
-        if (recurringCheckbox && recurrenceOptions) {
-            recurringCheckbox.addEventListener('change', () => {
-                recurrenceOptions.classList.toggle('hidden', !recurringCheckbox.checked);
-            });
-
-            // Set initial state based on todo
-            if (todo.isRecurring) {
-                recurrenceOptions.classList.remove('hidden');
-            }
-        }
-
-        if (saveBtn) {
-            saveBtn.addEventListener('click', () => {
-                const updates = {
-                    text: Utils.sanitizeHTML(document.getElementById('edit-todo-text').value),
-                    priority: document.getElementById('edit-todo-priority').value,
-                    category: document.getElementById('edit-todo-category').value,
-                    date: document.getElementById('edit-todo-date').value,
-                    estimatedTime: parseInt(document.getElementById('edit-todo-estimated-time').value) || 0,
-                    tags: document.getElementById('edit-todo-tags').value
-                        .split(',')
-                        .map(tag => tag.trim())
-                        .filter(tag => tag),
-                    notes: Utils.sanitizeHTML(document.getElementById('edit-todo-notes').value),
-                    isRecurring: document.getElementById('edit-todo-recurring').checked,
-                    recurrencePattern: document.getElementById('edit-todo-recurrence-pattern').value,
-                    subtasks: this.getUpdatedSubtasks()
-                };
-
-                this.updateTodo(todo.id, updates);
-                modal.remove();
-            });
-        }
-
-        if (addSubtaskBtn) {
-            addSubtaskBtn.addEventListener('click', () => {
-                this.addNewSubtaskField();
-            });
-        }
-
-        if (addReminderBtn) {
-            addReminderBtn.addEventListener('click', () => {
-                const reminderDate = document.getElementById('edit-todo-reminder-date').value;
-                const reminderTime = document.getElementById('edit-todo-reminder-time').value;
-
-                if (reminderDate && reminderTime) {
-                    this.addReminder(todo.id, reminderDate, reminderTime);
-                    document.getElementById('edit-todo-reminder-date').value = '';
-                    document.getElementById('edit-todo-reminder-time').value = '';
-                } else {
-                    this.showNotification('Silakan masukkan tanggal dan waktu pengingat', 'warning');
-                }
-            });
-        }
-    },
-
-    getUpdatedSubtasks() {
-        const subtaskInputs = document.querySelectorAll('.subtask-input');
-        const subtaskCheckboxes = document.querySelectorAll('.subtask-checkbox');
-
-        return Array.from(subtaskInputs).map((input, index) => ({
-            id: parseInt(input.dataset.subtaskId),
-            text: input.value,
-            completed: subtaskCheckboxes[index].checked
-        }));
-    },
-
-    addNewSubtaskField() {
-        const subtasksContainer = document.getElementById('edit-subtasks');
-        const newSubtaskId = Date.now();
-
-        const subtaskField = document.createElement('div');
-        subtaskField.className = 'flex items-center space-x-2';
-        subtaskField.innerHTML = `
-            <input type="checkbox" data-subtask-id="${newSubtaskId}" class="subtask-checkbox">
-            <input type="text" data-subtask-id="${newSubtaskId}" class="subtask-input flex-grow form-input"
-                   placeholder="Masukkan subtask...">
-            <button class="remove-subtask text-red-500 hover:text-red-700" data-subtask-id="${newSubtaskId}">
-                <i class="fas fa-trash"></i>
-            </button>
-        `;
-
-        subtasksContainer.appendChild(subtaskField);
-
-        // Add event listener to remove button
-        subtaskField.querySelector('.remove-subtask').addEventListener('click', (e) => {
-            subtaskField.remove();
-        });
-    },
-
-    expandTodo(id) {
-        const todo = this.todos.find(t => t.id === id);
-        if (!todo) return;
-
-        // Create expanded view modal
-        const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 modal';
-        modal.innerHTML = `
-            <div class="bg-white rounded-lg p-6 w-full max-w-3xl max-h-screen overflow-y-auto">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold text-gray-800">Detail Todo</h2>
-                    <button class="close-modal text-gray-500 hover:text-gray-700">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-800">${todo.text}</h3>
-                        <div class="flex items-center space-x-3 mt-2">
-                            ${this.getPriorityBadge(todo.priority)}
-                            ${this.getCategoryBadge(todo.category)}
-                            ${todo.completed ? '<span class="text-green-600"><i class="fas fa-check mr-1"></i>Selesai</span>' : ''}
-                            ${todo.isRecurring ? '<span class="text-blue-600"><i class="fas fa-sync-alt mr-1"></i>Todo Berulang</span>' : ''}
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <p class="text-sm text-gray-500">Dibuat</p>
-                            <p class="font-medium">${new Date(todo.createdAt).toLocaleString('id-ID')}</p>
-                        </div>
-                        <div>
-                            <p class="text-sm text-gray-500">Diperbarui</p>
-                            <p class="font-medium">${new Date(todo.updatedAt).toLocaleString('id-ID')}</p>
-                        </div>
-                    </div>
-
-                    ${todo.date ? `
-                        <div>
-                            <p class="text-sm text-gray-500">Deadline</p>
-                            <p class="font-medium">${new Date(todo.date).toLocaleDateString('id-ID')}</p>
-                        </div>
-                    ` : ''}
-
-                    ${todo.estimatedTime > 0 ? `
-                        <div>
-                            <p class="text-sm text-gray-500">Estimasi Waktu</p>
-                            <p class="font-medium">${todo.estimatedTime} menit</p>
-                        </div>
-                    ` : ''}
-
-                    ${todo.notes ? `
-                        <div>
-                            <p class="text-sm text-gray-500">Catatan</p>
-                            <p class="font-medium">${todo.notes}</p>
-                        </div>
-                    ` : ''}
-
-                    ${todo.tags.length > 0 ? `
-                        <div>
-                            <p class="text-sm text-gray-500">Tags</p>
-                            <div class="flex flex-wrap gap-1 mt-1">
-                                ${todo.tags.map(tag => `
-                                    <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                                        #${tag}
-                                    </span>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    ${todo.subtasks.length > 0 ? `
-                        <div>
-                            <p class="text-sm text-gray-500 mb-2">Subtasks</p>
-                            <div class="space-y-2">
-                                ${todo.subtasks.map(subtask => `
-                                    <div class="flex items-center space-x-2">
-                                        <input type="checkbox" ${subtask.completed ? 'checked' : ''} disabled>
-                                        <span class="${subtask.completed ? 'line-through text-gray-500' : ''}">${subtask.text}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    ${todo.attachments.length > 0 ? `
-                        <div>
-                            <p class="text-sm text-gray-500 mb-2">Lampiran</p>
-                            <div class="space-y-2">
-                                ${todo.attachments.map(attachment => `
-                                    <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                        <div class="flex items-center space-x-2">
-                                            <i class="fas fa-paperclip text-gray-400"></i>
-                                            <span class="text-sm">${attachment.name}</span>
-                                            <span class="text-xs text-gray-500">(${this.formatFileSize(attachment.size)})</span>
-                                        </div>
-                                        <button class="text-blue-500 hover:text-blue-700 text-sm" onclick="Todo.downloadAttachment('${attachment.id}', ${todo.id})">
-                                            Download
-                                        </button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    ${todo.reminders.length > 0 ? `
-                        <div>
-                            <p class="text-sm text-gray-500 mb-2">Pengingat</p>
-                            <div class="space-y-2">
-                                ${todo.reminders.map(reminder => `
-                                    <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                        <div>
-                                            <span class="text-sm">${new Date(reminder.date + ' ' + reminder.time).toLocaleString('id-ID')}</span>
-                                            <span class="text-xs text-gray-500 ml-2">${reminder.triggered ? 'Terpicu' : 'Belum terpicu'}</span>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                </div>
-
-                <div class="flex justify-end mt-6 space-x-3">
-                    <button class="btn btn-ghost" onclick="this.closest('.modal').remove()">
-                        Tutup
-                    </button>
-                    <button class="btn btn-primary" onclick="Todo.editTodo(${todo.id}); this.closest('.modal').remove()">
-                        Edit
-                    </button>
-                </div>
-            </div>
-        `;
-
-        // Add event listener to close button
-        modal.querySelector('.close-modal').addEventListener('click', () => {
-            modal.remove();
-        });
-
-        document.body.appendChild(modal);
-    },
-
     downloadAttachment(attachmentId, todoId) {
         const todo = this.todos.find(t => t.id === todoId);
         if (!todo) return;
@@ -1523,6 +2237,61 @@ const Todo = {
         this.saveTodos();
     },
 
+    deleteTodo(id) {
+        const todoIndex = this.todos.findIndex(t => t.id === id);
+        if (todoIndex === -1) {
+            this.showNotification('Todo tidak ditemukan', 'error');
+            return;
+        }
+
+        // Confirm deletion
+        const todo = this.todos[todoIndex];
+        if (confirm(`Apakah Anda yakin ingin menghapus todo "${todo.text}"?`)) {
+            this.todos.splice(todoIndex, 1);
+            this.saveTodos();
+            this.render();
+            this.updateStats();
+            this.showNotification('Todo berhasil dihapus', 'success');
+            this.trackActivity('deleted', todo);
+        }
+    },
+
+    duplicateTodo(id) {
+        const originalTodo = this.todos.find(t => t.id === id);
+        if (!originalTodo) {
+            this.showNotification('Todo tidak ditemukan', 'error');
+            return;
+        }
+
+        try {
+            const duplicatedTodo = {
+                ...originalTodo,
+                id: Date.now(), // New unique ID
+                completed: false, // New todo should not be completed
+                completedAt: null,
+                lastCompleted: null,
+                createdAt: new Date().toISOString(), // New creation time
+                updatedAt: new Date().toISOString(), // New update time
+                progress: 0, // Reset progress
+                subtasks: originalTodo.subtasks.map(st => ({
+                    ...st,
+                    id: Date.now() + Math.random() // Ensure unique subtask IDs
+                })),
+                completedSubtasks: 0 // Reset completed subtasks count
+            };
+
+            this.todos.unshift(duplicatedTodo);
+            this.saveTodos();
+            this.render();
+            this.updateStats();
+            this.showNotification('Todo berhasil diduplikat', 'success');
+            this.trackActivity('duplicated', duplicatedTodo);
+        } catch (error) {
+            console.error('Error duplicating todo:', error);
+            this.showNotification('Gagal menduplikat todo. Silakan coba lagi.', 'error');
+        }
+    },
+
     // Clean up resources to prevent memory leaks
     destroy() {
         // Clear any active intervals or timeouts if present
@@ -1537,7 +2306,7 @@ const Todo = {
         return this.todos
             .filter(todo => !todo.completed && new Date(todo.date) >= new Date(today))
             .sort((a, b) => {
-                const priorityOrder = { high: 0, medium: 1, low: 2 };
+                const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
                 return priorityOrder[a.priority] - priorityOrder[b.priority];
             })
             .slice(0, 5); // Ambil 5 todo prioritas tertinggi
@@ -1557,7 +2326,7 @@ const Todo = {
             return { valid: false, message: 'Text todo terlalu panjang (maksimal 500 karakter)' };
         }
 
-        if (!todo.priority || !['low', 'medium', 'high'].includes(todo.priority)) {
+        if (!todo.priority || !['low', 'medium', 'high', 'critical'].includes(todo.priority)) {
             return { valid: false, message: 'Prioritas todo tidak valid' };
         }
 
