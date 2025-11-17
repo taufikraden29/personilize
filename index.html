@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Personal App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom styles for animations and transitions */
+        .tab-content {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .habit-checkbox {
+            transition: all 0.2s ease;
+        }
+
+        .habit-checkbox:checked {
+            background-color: #10b981;
+            border-color: #10b981;
+        }
+
+        .notification-enter {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        .modal-backdrop {
+            backdrop-filter: blur(4px);
+        }
+
+        .priority-high {
+            border-left: 4px solid #ef4444;
+        }
+
+        .priority-medium {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .priority-low {
+            border-left: 4px solid #10b981;
+        }
+
+        .dark-mode {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+
+        .dark-mode .bg-white {
+            background-color: #2d3748;
+        }
+
+        .dark-mode .text-gray-800 {
+            color: #e2e8f0;
+        }
+
+        .dark-mode .text-gray-700 {
+            color: #cbd5e0;
+        }
+
+        .dark-mode .text-gray-600 {
+            color: #a0aec0;
+        }
+
+        .dark-mode .border-gray-300 {
+            border-color: #4a5568;
+        }
+
+        .dark-mode .bg-gray-50 {
+            background-color: #1a202c;
+        }
+
+        .dark-mode .bg-gray-200 {
+            background-color: #4a5568;
+        }
+
+        .dark-mode .hover\:bg-gray-100:hover {
+            background-color: #4a5568;
+        }
+
+        .dark-mode .hover\:bg-gray-300:hover {
+            background-color: #718096;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800">
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-lg" role="banner">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold flex items-center">
+                <i class="fas fa-user-circle mr-2" aria-hidden="true"></i> My Personal App
+            </h1>
+            <div class="flex items-center space-x-4">
+                <div id="user-name" class="hidden md:block"></div>
+                <button id="settings-btn" class="hover:bg-indigo-700 p-2 rounded-full transition" aria-label="Pengaturan">
+                    <i class="fas fa-cog" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-md sticky top-0 z-10" role="navigation" aria-label="Navigasi Utama">
+        <div class="container mx-auto px-4">
+            <ul class="flex flex-wrap" role="tablist">
+                <li class="nav-item">
+                    <button data-tab="dashboard"
+                        class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center active"
+                        role="tab" aria-selected="true" aria-controls="dashboard">
+                        <i class="fas fa-tachometer-alt mr-2" aria-hidden="true"></i> Dashboard
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="todo" class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="todo">
+                        <i class="fas fa-tasks mr-2" aria-hidden="true"></i> Todo List
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="notes" class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="notes">
+                        <i class="fas fa-sticky-note mr-2" aria-hidden="true"></i> Catatan
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="pomodoro"
+                        class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="pomodoro">
+                        <i class="fas fa-clock mr-2" aria-hidden="true"></i> Pomodoro
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="habits" class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="habits">
+                        <i class="fas fa-calendar-check mr-2" aria-hidden="true"></i> Kebiasaan
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="achievements"
+                        class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="achievements">
+                        <i class="fas fa-trophy mr-2" aria-hidden="true"></i> Pencapaian
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="calendar"
+                        class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="calendar">
+                        <i class="fas fa-calendar-alt mr-2" aria-hidden="true"></i> Kalender
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="journal" class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="journal">
+                        <i class="fas fa-book mr-2" aria-hidden="true"></i> Journal
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="goals" class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="goals">
+                        <i class="fas fa-bullseye mr-2" aria-hidden="true"></i> Tujuan
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button data-tab="analytics"
+                        class="tab-btn px-4 py-3 hover:bg-gray-100 transition flex items-center"
+                        role="tab" aria-selected="false" aria-controls="analytics">
+                        <i class="fas fa-chart-line mr-2" aria-hidden="true"></i> Analytics
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6" role="main">
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6" role="group" aria-label="Statistik Dashboard">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold text-gray-700">Todo Hari Ini</h3>
+                        <i class="fas fa-tasks text-indigo-500" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-indigo-600" id="today-todos-count">0</p>
+                    <p class="text-sm text-gray-500">Total: <span id="total-todos-count">0</span></p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold text-gray-700">Catatan</h3>
+                        <i class="fas fa-sticky-note text-yellow-500" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-yellow-600" id="notes-count">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold text-gray-700">Kebiasaan Aktif</h3>
+                        <i class="fas fa-calendar-check text-green-500" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-green-600" id="active-habits-count">0</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold text-gray-700">Pencapaian</h3>
+                        <i class="fas fa-trophy text-purple-500" aria-hidden="true"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-purple-600" id="achievements-count">0</p>
+                </div>
+            </div>
+
+            <!-- Weather Widget -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Cuaca Hari Ini</h2>
+                <div id="weather-widget" class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-cloud-sun text-4xl text-yellow-500 mr-4"></i>
+                        <div>
+                            <p class="text-2xl font-bold text-gray-800" id="temperature">--°C</p>
+                            <p class="text-gray-600" id="weather-desc">Memuat...</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm text-gray-600">Lokasi</p>
+                        <p class="font-semibold" id="location">Jakarta</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Quote -->
+            <div class="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg shadow-md p-6 mb-6 text-white">
+                <h2 class="text-xl font-bold mb-4">Kutipan Hari Ini</h2>
+                <p class="text-lg italic mb-2" id="daily-quote">Memuat kutipan...</p>
+                <p class="text-sm" id="quote-author">- Author</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-bold mb-4 text-gray-800">Todo Prioritas</h2>
+                    <div id="priority-todos" class="space-y-2">
+                        <!-- Priority todos will be inserted here -->
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-bold mb-4 text-gray-800">Kebiasaan Hari Ini</h2>
+                    <div id="today-habits" class="space-y-2">
+                        <!-- Today's habits will be inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Statistik Mingguan</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2 text-gray-700">Todo Selesai</h3>
+                        <canvas id="todo-chart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2 text-gray-700">Kebiasaan Selesai</h3>
+                        <canvas id="habit-chart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Tren Produktivitas</h2>
+                <div>
+                    <canvas id="dashboard-productivity-trend" width="800" height="300"></canvas>
+                </div>
+            </div>
+
+            <div class="mt-6 bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Distribusi Kategori</h2>
+                <div>
+                    <canvas id="dashboard-category-distribution" width="800" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Todo Tab -->
+        <div id="todo" class="tab-content hidden" role="tabpanel" aria-labelledby="todo-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Todo List</h2>
+                    <button id="export-todos" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+                        <i class="fas fa-download mr-2"></i> Export Todos
+                    </button>
+                </div>
+
+                <!-- Add Todo Form -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-6">
+                    <div class="lg:col-span-2">
+                        <input type="text" id="todo-input" placeholder="Tambah todo baru..."
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            aria-label="Input todo baru">
+                    </div>
+                    <select id="todo-priority"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Prioritas todo">
+                        <option value="low">Rendah</option>
+                        <option value="medium" selected>Sedang</option>
+                        <option value="high">Tinggi</option>
+                    </select>
+                    <select id="todo-category"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Kategori todo">
+                        <option value="personal">Pribadi</option>
+                        <option value="work">Pekerjaan</option>
+                        <option value="shopping">Belanja</option>
+                        <option value="health">Kesehatan</option>
+                        <option value="other">Lainnya</option>
+                    </select>
+                    <input type="number" id="todo-estimated-time" placeholder="Menit"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Estimasi waktu dalam menit">
+                    <input type="date" id="todo-date"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Tanggal jatuh tempo">
+                    <button id="add-todo-btn"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center justify-center"
+                        aria-label="Tambah todo">
+                        <i class="fas fa-plus mr-2" aria-label="Tambah"></i> Tambah
+                    </button>
+                </div>
+
+                <!-- Additional Todo Form Fields -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tags (pisahkan dengan koma)</label>
+                        <input type="text" id="todo-tags" placeholder="kerja, penting, proyek"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label>
+                        <input type="text" id="todo-notes" placeholder="Tambahkan catatan..."
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="todo-recurring" class="mr-2">
+                        <label for="todo-recurring" class="text-sm font-medium text-gray-700">Todo Berulang</label>
+                    </div>
+                    <div id="recurrence-options" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Pola Pengulangan</label>
+                        <select id="todo-recurrence-pattern" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="daily">Harian</option>
+                            <option value="weekly">Mingguan</option>
+                            <option value="monthly">Bulanan</option>
+                            <option value="yearly">Tahunan</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filters and Search -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div>
+                        <input type="text" id="search-todos" placeholder="Cari todo..."
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <select id="priority-filter" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="all">Semua Prioritas</option>
+                            <option value="high">Tinggi</option>
+                            <option value="medium">Sedang</option>
+                            <option value="low">Rendah</option>
+                        </select>
+                    </div>
+                    <div>
+                        <select id="category-filter" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="all">Semua Kategori</option>
+                            <option value="personal">Pribadi</option>
+                            <option value="work">Pekerjaan</option>
+                            <option value="shopping">Belanja</option>
+                            <option value="health">Kesehatan</option>
+                            <option value="other">Lainnya</option>
+                        </select>
+                    </div>
+                    <div>
+                        <select id="date-range-filter" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="all">Semua Tanggal</option>
+                            <option value="today">Hari Ini</option>
+                            <option value="week">7 Hari Terakhir</option>
+                            <option value="month">30 Hari Terakhir</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filter Buttons -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button class="filter-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                        data-filter="all">Semua</button>
+                    <button class="filter-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                        data-filter="completed">Selesai</button>
+                    <button class="filter-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                        data-filter="pending">Pending</button>
+                    <button class="filter-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                        data-filter="overdue">Terlambat</button>
+                    <button class="filter-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                        data-filter="due-soon">Segera</button>
+                </div>
+
+                <!-- Sort and View Controls -->
+                <div class="flex flex-wrap justify-between items-center mb-4">
+                    <div>
+                        <select id="sort-todos" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="createdAt-desc">Terbaru</option>
+                            <option value="createdAt-asc">Terlama</option>
+                            <option value="priority-desc">Prioritas Tinggi</option>
+                            <option value="priority-asc">Prioritas Rendah</option>
+                            <option value="date-asc">Tanggal Terdekat</option>
+                            <option value="date-desc">Tanggal Terjauh</option>
+                            <option value="text-asc">A-Z</option>
+                            <option value="text-desc">Z-A</option>
+                        </select>
+                    </div>
+                    <div id="filter-stats" class="text-sm text-gray-500"></div>
+                </div>
+
+                <!-- Bulk Actions -->
+                <div id="bulk-actions" class="hidden mb-4 p-3 bg-blue-50 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-700">Terpilih: <span id="selected-count">0</span></span>
+                        <button class="bulk-complete px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+                            <i class="fas fa-check mr-1"></i> Tandai Selesai
+                        </button>
+                        <button class="bulk-delete px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">
+                            <i class="fas fa-trash mr-1"></i> Hapus
+                        </button>
+                        <button class="bulk-export px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                            <i class="fas fa-download mr-1"></i> Ekspor
+                        </button>
+                    </div>
+                </div>
+
+                <div id="todo-list" class="space-y-2">
+                    <!-- Todos will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes Tab -->
+        <div id="notes" class="tab-content hidden" role="tabpanel" aria-labelledby="notes-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Catatan</h2>
+
+                <!-- Add Note Form -->
+                <div class="flex gap-4 mb-6">
+                    <input type="text" id="note-title" placeholder="Judul catatan..."
+                        class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Judul catatan baru">
+                    <button id="add-note-btn"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        aria-label="Tambah catatan">
+                        <i class="fas fa-plus mr-2" aria-hidden="true"></i> Tambah
+                    </button>
+                </div>
+
+                <!-- Filters and Controls -->
+                <div class="flex flex-wrap gap-4 mb-6 items-center">
+                    <!-- Category Filters -->
+                    <div class="flex gap-2 flex-wrap">
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition active"
+                            data-category="all">Semua</button>
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                            data-category="personal">Pribadi</button>
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                            data-category="work">Pekerjaan</button>
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                            data-category="ideas">Ide</button>
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                            data-category="shopping">Belanja</button>
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                            data-category="health">Kesehatan</button>
+                        <button class="category-btn px-3 py-1 bg-gray-200 rounded-full text-sm hover:bg-gray-300 transition"
+                            data-category="archived">Arsip</button>
+                    </div>
+
+                    <!-- Pinned Filter -->
+                    <div class="flex items-center">
+                        <input type="checkbox" id="filter-pinned" class="mr-1">
+                        <label for="filter-pinned" class="text-sm">Disematkan</label>
+                    </div>
+
+                    <!-- Archived Filter -->
+                    <div class="flex items-center">
+                        <input type="checkbox" id="filter-archived" class="mr-1">
+                        <label for="filter-archived" class="text-sm">Diarsipkan</label>
+                    </div>
+                </div>
+
+                <!-- Search, Sort, View Controls -->
+                <div class="flex flex-wrap gap-4 mb-6 items-center">
+                    <div class="flex-grow">
+                        <input type="text" id="search-notes" placeholder="Cari catatan..."
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <select id="sort-notes" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="updatedAt-desc">Terbaru</option>
+                        <option value="updatedAt-asc">Terlama</option>
+                        <option value="title-asc">Judul A-Z</option>
+                        <option value="title-desc">Judul Z-A</option>
+                        <option value="wordCount-desc">Paling Panjang</option>
+                        <option value="wordCount-asc">Paling Pendek</option>
+                    </select>
+
+                    <select id="view-toggle" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="grid">Grid</option>
+                        <option value="list">List</option>
+                    </select>
+                </div>
+
+                <!-- Bulk Actions -->
+                <div id="bulk-actions" class="hidden mb-4 p-3 bg-blue-50 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-700">Terpilih: <span id="selected-count">0</span></span>
+                        <button id="bulk-pin-notes" class="bulk-pin px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm">
+                            <i class="fas fa-thumbtack mr-1"></i> Sematkan
+                        </button>
+                        <button id="bulk-archive-notes" class="bulk-archive px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm">
+                            <i class="fas fa-archive mr-1"></i> Arsipkan
+                        </button>
+                        <button id="bulk-delete-notes" class="bulk-delete px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">
+                            <i class="fas fa-trash mr-1"></i> Hapus
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div id="filter-stats" class="mb-4 text-sm text-gray-500"></div>
+
+                <!-- Notes List -->
+                <div id="notes-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Notes will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Pomodoro Tab -->
+        <div id="pomodoro" class="tab-content hidden" role="tabpanel" aria-labelledby="pomodoro-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Pomodoro Timer</h2>
+                <div class="flex justify-center mb-6">
+                    <div class="relative">
+                        <svg class="w-64 h-64 transform -rotate-90" aria-label="Timer Pomodoro" role="img">
+                            <circle cx="128" cy="128" r="120" stroke="#e5e7eb" stroke-width="8" fill="none" />
+                            <circle id="pomodoro-progress" cx="128" cy="128" r="120" stroke="#6366f1" stroke-width="8"
+                                fill="none" stroke-dasharray="754" stroke-dashoffset="754" stroke-linecap="round" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span id="pomodoro-timer" class="text-5xl font-bold text-gray-800" aria-live="polite">25:00</span>
+                            <span id="pomodoro-status" class="text-lg text-gray-600 mt-2">Fokus</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-center gap-4 mb-6">
+                    <button id="pomodoro-start"
+                        class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                        aria-label="Mulai timer">
+                        <i class="fas fa-play mr-2" aria-hidden="true"></i> Mulai
+                    </button>
+                    <button id="pomodoro-pause"
+                        class="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition"
+                        aria-label="Jeda timer">
+                        <i class="fas fa-pause mr-2" aria-hidden="true"></i> Jeda
+                    </button>
+                    <button id="pomodoro-reset"
+                        class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                        aria-label="Reset timer">
+                        <i class="fas fa-redo mr-2" aria-hidden="true"></i> Reset
+                    </button>
+                </div>
+                <div class="flex justify-center gap-4">
+                    <div class="text-center">
+                        <p class="text-sm text-gray-600">Sesi Selesai</p>
+                        <p class="text-2xl font-bold text-indigo-600" id="pomodoro-sessions">0</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-gray-600">Total Waktu</p>
+                        <p class="text-2xl font-bold text-indigo-600" id="pomodoro-total-time">0m</p>
+                    </div>
+                </div>
+                <div class="mt-6 border-t pt-6">
+                    <h3 class="text-lg font-semibold mb-3 text-gray-700">Pengaturan</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Waktu Fokus (menit)</label>
+                            <input type="number" id="pomodoro-focus-time" value="25" min="1" max="60"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Waktu Istirahat Pendek
+                                (menit)</label>
+                            <input type="number" id="pomodoro-short-break" value="5" min="1" max="30"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Waktu Istirahat Panjang
+                                (menit)</label>
+                            <input type="number" id="pomodoro-long-break" value="15" min="1" max="60"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Habits Tab -->
+        <div id="habits" class="tab-content hidden" role="tabpanel" aria-labelledby="habits-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Pelacak Kebiasaan</h2>
+                <div class="flex flex-col md:flex-row gap-4 mb-6">
+                    <input type="text" id="habit-input" placeholder="Tambah kebiasaan baru..."
+                        class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Input kebiasaan baru">
+                    <select id="habit-frequency"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Frekuensi kebiasaan">
+                        <option value="daily">Harian</option>
+                        <option value="weekly">Mingguan</option>
+                        <option value="monthly">Bulanan</option>
+                    </select>
+                    <button id="add-habit-btn"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        aria-label="Tambah kebiasaan">
+                        <i class="fas fa-plus mr-2" aria-hidden="true"></i> Tambah
+                    </button>
+                </div>
+                <div id="habits-list" class="space-y-4">
+                    <!-- Habits will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Achievements Tab -->
+        <div id="achievements" class="tab-content hidden" role="tabpanel" aria-labelledby="achievements-tab">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Pencapaian</h2>
+                <div id="achievements-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" role="list">
+                    <!-- Achievements will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Tab -->
+        <div id="calendar" class="tab-content hidden" role="tabpanel" aria-labelledby="calendar-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Kalender</h2>
+                    <div class="flex items-center space-x-2">
+                        <button id="prev-month" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition"
+                                aria-label="Bulan sebelumnya">
+                            <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                        </button>
+                        <span id="current-month" class="font-semibold text-lg" aria-live="polite"></span>
+                        <button id="next-month" class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition"
+                                aria-label="Bulan berikutnya">
+                            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-7 gap-2 mb-2" role="rowgroup">
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Min</div>
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Sen</div>
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Sel</div>
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Rab</div>
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Kam</div>
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Jum</div>
+                    <div class="text-center font-semibold text-gray-600 py-2" role="columnheader">Sab</div>
+                </div>
+                <div id="calendar-days" class="grid grid-cols-7 gap-2" role="grid">
+                    <!-- Calendar days will be inserted here -->
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-bold mb-4 text-gray-800">Agenda Hari Ini</h3>
+                <div id="today-agenda" class="space-y-3" role="list">
+                    <!-- Today's agenda will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Journal Tab -->
+        <div id="journal" class="tab-content hidden" role="tabpanel" aria-labelledby="journal-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Journal Pribadi</h2>
+                <div class="mb-4">
+                    <label for="journal-date" class="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+                    <input type="date" id="journal-date"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mood Hari Ini</label>
+                    <div class="flex space-x-2" role="radiogroup" aria-label="Pilihan mood">
+                        <button
+                            class="mood-btn px-4 py-2 rounded-lg border-2 border-gray-300 hover:border-indigo-500 transition"
+                            data-mood="very-happy" role="radio" aria-checked="false">😊</button>
+                        <button
+                            class="mood-btn px-4 py-2 rounded-lg border-2 border-gray-300 hover:border-indigo-500 transition"
+                            data-mood="happy" role="radio" aria-checked="false">🙂</button>
+                        <button
+                            class="mood-btn px-4 py-2 rounded-lg border-2 border-gray-300 hover:border-indigo-500 transition"
+                            data-mood="neutral" role="radio" aria-checked="false">😐</button>
+                        <button
+                            class="mood-btn px-4 py-2 rounded-lg border-2 border-gray-300 hover:border-indigo-500 transition"
+                            data-mood="sad" role="radio" aria-checked="false">😢</button>
+                        <button
+                            class="mood-btn px-4 py-2 rounded-lg border-2 border-gray-300 hover:border-indigo-500 transition"
+                            data-mood="angry" role="radio" aria-checked="false">😠</button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label for="journal-content" class="block text-sm font-medium text-gray-700 mb-1">Tulisan Hari Ini</label>
+                    <textarea id="journal-content" rows="10"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Apa yang terjadi hari ini?" aria-describedby="journal-content-help">
+                    </textarea>
+                    <div id="journal-content-help" class="sr-only">Tuliskan pengalaman atau perasaan Anda hari ini</div>
+                </div>
+                <div class="mb-4">
+                    <label for="journal-tags" class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                    <input type="text" id="journal-tags"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="pisahkan dengan koma" aria-label="Tag untuk journal">
+                </div>
+                <button id="save-journal"
+                    class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                    aria-label="Simpan journal">
+                    <i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan
+                </button>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-bold mb-4 text-gray-800">Journal Sebelumnya</h3>
+                <div id="journal-list" class="space-y-4">
+                    <!-- Previous journals will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Goals Tab -->
+        <div id="goals" class="tab-content hidden" role="tabpanel" aria-labelledby="goals-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Tujuan Saya</h2>
+                <div class="flex flex-col md:flex-row gap-4 mb-6">
+                    <input type="text" id="goal-title" placeholder="Judul tujuan..."
+                        class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Judul tujuan baru">
+                    <select id="goal-category"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Kategori tujuan">
+                        <option value="personal">Pribadi</option>
+                        <option value="career">Karir</option>
+                        <option value="health">Kesehatan</option>
+                        <option value="finance">Keuangan</option>
+                        <option value="learning">Pembelajaran</option>
+                    </select>
+                    <input type="date" id="goal-deadline"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Tanggal tenggat waktu">
+                    <button id="add-goal-btn"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        aria-label="Tambah tujuan">
+                        <i class="fas fa-plus mr-2" aria-hidden="true"></i> Tambah
+                    </button>
+                </div>
+                <div id="goals-list" class="space-y-4" role="list">
+                    <!-- Goals will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analytics" class="tab-content hidden" role="tabpanel" aria-labelledby="analytics-tab">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Analytics Produktivitas</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6" role="group" aria-label="Statistik Analitik">
+                    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+                        <h3 class="text-lg font-semibold mb-2">Produktivitas Minggu Ini</h3>
+                        <p class="text-3xl font-bold" id="weekly-productivity">0%</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white">
+                        <h3 class="text-lg font-semibold mb-2">Todo Selesai</h3>
+                        <p class="text-3xl font-bold" id="total-completed-todos">0</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-6 text-white">
+                        <h3 class="text-lg font-semibold mb-2">Jam Fokus</h3>
+                        <p class="text-3xl font-bold" id="total-focus-hours">0</p>
+                    </div>
+                    <div class="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-6 text-white">
+                        <h3 class="text-lg font-semibold mb-2">Streak Terbaik</h3>
+                        <p class="text-3xl font-bold" id="best-streak">0</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700">Tren Produktivitas (30 hari)</h3>
+                        <canvas id="productivity-trend" width="400" height="200" role="img"
+                               aria-label="Grafik tren produktivitas selama 30 hari terakhir"></canvas>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700">Distribusi Kategori</h3>
+                        <canvas id="category-distribution" width="400" height="200" role="img"
+                                aria-label="Grafik distribusi kategori tugas"></canvas>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold mb-3 text-gray-700">Analisis Mood</h3>
+                    <canvas id="mood-analysis" width="400" height="200" role="img"
+                            aria-label="Grafik analisis mood berdasarkan jurnal harian"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Quick Capture Button -->
+    <div id="quick-capture"
+        class="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center cursor-pointer hover:bg-indigo-700 transition transform hover:scale-110 z-40"
+        aria-label="Quick Capture" role="button" tabindex="0">
+        <i class="fas fa-plus text-xl" aria-hidden="true"></i>
+    </div>
+
+    <!-- Quick Capture Modal -->
+    <div id="quick-capture-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 modal-backdrop"
+        role="dialog" aria-labelledby="quick-capture-title" aria-modal="true">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="quick-capture-title" class="text-xl font-bold text-gray-800">Quick Capture</h2>
+                <button id="close-quick-capture" class="text-gray-500 hover:text-gray-700"
+                        aria-label="Tutup modal quick capture">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <label for="quick-capture-text" class="block text-sm font-medium text-gray-700 mb-1">Tangkap ide cepat</label>
+                <textarea id="quick-capture-text" rows="4"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Tulis ide, tugas, atau catatan cepat..."></textarea>
+            </div>
+            <div class="mb-4">
+                <label for="quick-capture-type" class="block text-sm font-medium text-gray-700 mb-1">Simpan sebagai</label>
+                <select id="quick-capture-type"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="todo">Todo</option>
+                    <option value="note">Catatan</option>
+                    <option value="journal">Journal</option>
+                </select>
+            </div>
+            <button id="save-quick-capture"
+                class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                Simpan
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal"
+        class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 modal-backdrop"
+        role="dialog" aria-labelledby="settings-title" aria-modal="true">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="settings-title" class="text-xl font-bold text-gray-800">Pengaturan</h2>
+                <button id="close-settings" class="text-gray-500 hover:text-gray-700"
+                        aria-label="Tutup modal pengaturan">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label for="user-name-input" class="block text-sm font-medium text-gray-700 mb-1">Nama Pengguna</label>
+                    <input type="text" id="user-name-input" placeholder="Masukkan nama Anda"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-describedby="user-name-help">
+                    <div id="user-name-help" class="sr-only">Masukkan nama yang akan ditampilkan di aplikasi</div>
+                </div>
+                <div>
+                    <label for="theme-select" class="block text-sm font-medium text-gray-700 mb-1">Tema</label>
+                    <select id="theme-select"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        aria-label="Pilihan tema tampilan">
+                        <option value="light">Terang</option>
+                        <option value="dark">Gelap</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notifikasi</label>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="notification-toggle" class="mr-2" aria-label="Aktifkan notifikasi">
+                        <label for="notification-toggle">Aktifkan notifikasi</label>
+                    </div>
+                </div>
+                <div>
+                    <button id="export-data"
+                        class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        aria-label="Ekspor semua data">
+                        <i class="fas fa-download mr-2" aria-hidden="true"></i> Export Data
+                    </button>
+                </div>
+                <div>
+                    <button id="clear-data"
+                        class="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                        aria-label="Hapus semua data">
+                        <i class="fas fa-trash mr-2" aria-hidden="true"></i> Hapus Semua Data
+                    </button>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="save-settings"
+                    class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                    aria-label="Simpan pengaturan">
+                    Simpan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-toast"
+        class="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-full transition-transform duration-300 z-50"
+        role="alert" aria-live="polite">
+        <div class="flex items-center">
+            <i class="fas fa-check-circle mr-2" aria-hidden="true"></i>
+            <span id="notification-message">Notifikasi</span>
+        </div>
+    </div>
+    <!-- SCRIPT LOADING (DEFER untuk kecepatan & keamanan) -->
+    <script src="js/utils.js" defer></script>
+    <script src="js/storage.js" defer></script>
+    <script src="js/achievements.js" defer></script>
+    <script src="js/todo.js" defer></script>
+    <script src="js/notes.js" defer></script>
+    <script src="js/pomodoro.js" defer></script>
+    <script src="js/habits.js" defer></script>
+    <script src="js/dashboard.js" defer></script>
+    <script src="js/calendar.js" defer></script>
+    <script src="js/journal.js" defer></script>
+    <script src="js/goals.js" defer></script>
+    <script src="js/analytics.js" defer></script>
+    <script src="js/weather.js" defer></script>
+    <script src="js/quotes.js" defer></script>
+    <script src="js/quickCapture.js" defer></script>
+    <script src="js/app.js" defer></script>
+
+</body>
